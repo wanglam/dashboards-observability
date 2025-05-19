@@ -109,6 +109,7 @@ export function registerNoteRoute(router: IRouter) {
           NOTEBOOK_SAVED_OBJECT,
           request.params.noteId
         );
+        console.log(notebookinfo);
         return response.ok({
           body: notebookinfo.attributes.savedNotebook,
         });

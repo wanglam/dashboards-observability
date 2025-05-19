@@ -16,6 +16,7 @@ import {
 import { ParaType } from '../../../../../common/types/notebooks';
 import { getOSDHttp, getPPLService, uiSettingsService } from '../../../../../common/utils';
 import { VisualizationContainer } from '../../../../components/custom_panels/panel_modules/visualization_container';
+import { DeepResearchContainer } from '../../../../components/custom_panels/panel_modules/deep_research_container';
 import PPLService from '../../../../services/requests/ppl';
 import { QueryDataGridMemo } from './para_query_grid';
 
@@ -55,6 +56,7 @@ const getQueryOutputData = (queryObject: any) => {
 
 const OutputBody = ({
   key,
+  http,
   typeOut,
   val,
   para,
@@ -63,6 +65,7 @@ const OutputBody = ({
   DashboardContainerByValueRenderer,
 }: {
   key: string;
+  http: CoreStart['http'];
   typeOut: string;
   val: string;
   para: ParaType;
@@ -171,6 +174,8 @@ const OutputBody = ({
         return <pre key={key}>{val}</pre>;
       case 'IMG':
         return <img alt="" src={'data:image/gif;base64,' + val} key={key} />;
+      case 'DEEP_RESEARCH':
+        return <DeepResearchContainer http={http} para={para} />;
       default:
         return <pre key={key}>{val}</pre>;
     }
@@ -197,7 +202,7 @@ export const ParaOutput = (props: {
   setVisInput: (input: DashboardContainerInput) => void;
   DashboardContainerByValueRenderer: DashboardStart['DashboardContainerByValueRenderer'];
 }) => {
-  const { para, DashboardContainerByValueRenderer, visInput, setVisInput } = props;
+  const { para, http, DashboardContainerByValueRenderer, visInput, setVisInput } = props;
 
   return (
     !para.isOutputHidden && (
@@ -212,6 +217,7 @@ export const ParaOutput = (props: {
               visInput={visInput}
               setVisInput={setVisInput}
               DashboardContainerByValueRenderer={DashboardContainerByValueRenderer}
+              http={http}
             />
           );
         })}

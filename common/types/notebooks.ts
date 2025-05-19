@@ -34,6 +34,7 @@ export interface ParaType {
   isOutputHidden: boolean;
   showAddPara: boolean;
   isVizualisation: boolean;
+  isDeepResearch: boolean;
   vizObjectInput: string;
   id: number;
   inp: string;
