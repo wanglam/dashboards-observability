@@ -57,6 +57,8 @@ import {
 } from './helpers/reporting_context_menu_helper';
 import { Paragraphs } from './paragraph_components/paragraphs';
 
+const ParagraphTypeDeepResearch = 'DEEP_RESEARCH';
+
 const newNavigation = coreRefs.chrome?.navGroup.getNavGroupEnabled();
 
 const panelStyles: CSS.Properties = {
@@ -819,6 +821,14 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
             },
             'data-test-subj': 'AddVisualizationBlockBtn',
           },
+          {
+            name: 'Deep Research',
+            onClick: () => {
+              this.setState({ isAddParaPopoverOpen: false });
+              this.addPara(this.state.paragraphs.length, '', ParagraphTypeDeepResearch);
+            },
+            'data-test-subj': 'AddDeepSearchBlockBtn',
+          },
         ],
       },
     ];
@@ -905,6 +915,13 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
               this.addPara(0, '', 'VISUALIZATION');
             },
           },
+          {
+            name: 'DeepResearch',
+            onClick: () => {
+              this.setState({ isParaActionsPopoverOpen: false });
+              this.addPara(0, '', ParagraphTypeDeepResearch);
+            },
+          },
         ],
       },
       {
@@ -923,6 +940,13 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
             onClick: () => {
               this.setState({ isParaActionsPopoverOpen: false });
               this.addPara(this.state.paragraphs.length, '', 'VISUALIZATION');
+            },
+          },
+          {
+            name: 'DeepResearch',
+            onClick: () => {
+              this.setState({ isParaActionsPopoverOpen: false });
+              this.addPara(this.state.paragraphs.length, '', ParagraphTypeDeepResearch);
             },
           },
         ],
@@ -1301,6 +1325,21 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
                               style={{ marginBottom: 17 }}
                             >
                               Add visualization
+                            </EuiSmallButton>
+                          }
+                        />
+                      </EuiFlexItem>
+                      <EuiFlexItem grow={3}>
+                        <EuiCard
+                          icon={<EuiIcon size="xxl" type="inspect" />}
+                          title="Deep Research"
+                          description="Use deep research to analytics question."
+                          footer={
+                            <EuiSmallButton
+                              onClick={() => this.addPara(0, '', 'Deep Research')}
+                              style={{ marginBottom: 17 }}
+                            >
+                              Add deep research
                             </EuiSmallButton>
                           }
                         />

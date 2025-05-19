@@ -12,6 +12,7 @@ import {
   DefaultParagraph,
 } from '../../common/helpers/notebooks/default_notebook_schema';
 import { formatNotRecognized, inputIsQuery } from '../../common/helpers/notebooks/query_helpers';
+import { OpenSearchClient } from '../../../../../src/core/server';
 
 export function createNotebook(paragraphInput: string, inputType: string) {
   try {
@@ -24,6 +25,9 @@ export function createNotebook(paragraphInput: string, inputType: string) {
     }
     if (paragraphInput.substring(0, 3) === '%sql' || paragraphInput.substring(0, 3) === '%ppl') {
       paragraphType = 'QUERY';
+    }
+    if (inputType === 'DEEP_RESEARCH') {
+      paragraphType = inputType;
     }
     const inputObject = {
       inputType: paragraphType,
@@ -143,8 +147,19 @@ export async function updateRunFetchParagraph(
     dataSourceMDSId: string | undefined;
     dataSourceMDSLabel: string | undefined;
   },
-  opensearchNotebooksClient: SavedObjectsClientContract
+  opensearchNotebooksClient: SavedObjectsClientContract,
+  transport: OpenSearchClient['transport']
 ) {
+  let deepResearchAgentId;
+  try {
+    const { body } = await transport.request({
+      method: 'GET',
+      path: '/_plugins/_ml/config/os_deep_research',
+    });
+    deepResearchAgentId = body.configuration.agent_id;
+  } catch (error) {
+    // Add error catch here..
+  }
   try {
     const notebookinfo = await fetchNotebook(params.noteId, opensearchNotebooksClient);
     const updatedInputParagraphs = updateParagraphs(
@@ -155,7 +170,12 @@ export async function updateRunFetchParagraph(
       params.dataSourceMDSId,
       params.dataSourceMDSLabel
     );
-    const updatedOutputParagraphs = await runParagraph(updatedInputParagraphs, params.paragraphId);
+    const updatedOutputParagraphs = await runParagraph(
+      updatedInputParagraphs,
+      params.paragraphId,
+      transport,
+      deepResearchAgentId
+    );
 
     const updateNotebook = {
       paragraphs: updatedOutputParagraphs,
@@ -178,7 +198,12 @@ export async function updateRunFetchParagraph(
   }
 }
 
-export function runParagraph(paragraphs: DefaultParagraph[], paragraphId: string) {
+export async function runParagraph(
+  paragraphs: DefaultParagraph[],
+  paragraphId: string,
+  transport: OpenSearchClient['transport'],
+  deepResearchAgentId: string | undefined
+) {
   try {
     const updatedParagraphs = [];
     let index = 0;
@@ -224,6 +249,28 @@ export function runParagraph(paragraphs: DefaultParagraph[], paragraphId: string
             {
               outputType: 'OBSERVABILITY_VISUALIZATION',
               result: '',
+              execution_time: `${(now() - startTime).toFixed(3)} ms`,
+            },
+          ];
+        } else if (paragraphs[index].input.inputType === 'DEEP_RESEARCH') {
+          if (!deepResearchAgentId) {
+            throw new Error('No deep research agent id configured.');
+          }
+          updatedParagraph.dateModified = new Date().toISOString();
+          const { body } = await transport.request({
+            method: 'POST',
+            path: `/_plugins/_ml/agents/${deepResearchAgentId}/_execute`,
+            querystring: 'async=true',
+            body: {
+              parameters: {
+                question: paragraphs[index].input.inputText,
+              },
+            },
+          });
+          updatedParagraph.output = [
+            {
+              outputType: 'DEEP_RESEARCH',
+              result: JSON.stringify(body),
               execution_time: `${(now() - startTime).toFixed(3)} ms`,
             },
           ];

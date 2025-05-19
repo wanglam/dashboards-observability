@@ -95,6 +95,7 @@ export const defaultParagraphParser = (defaultBackendParagraphs: any) => {
         isOutputHidden: false,
         showAddPara: false,
         isVizualisation: vizParams.isViz,
+        isDeepResearch: paraObject.input.inputType.includes('DEEP_RESEARCH'),
         vizObjectInput: vizParams.VizObject,
         id: index + 1,
         inp: paraObject.input.inputText || '',

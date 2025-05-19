@@ -23,6 +23,7 @@ import {
   DefaultNotebooks,
   DefaultParagraph,
 } from '../../common/helpers/notebooks/default_notebook_schema';
+import { getOpenSearchClientTransport } from '../utils';
 export function registerParaRoute(router: IRouter) {
   router.post(
     {
@@ -139,7 +140,11 @@ export function registerParaRoute(router: IRouter) {
       try {
         const runResponse = await updateRunFetchParagraph(
           request.body,
-          context.core.savedObjects.client
+          context.core.savedObjects.client,
+          await getOpenSearchClientTransport({
+            context,
+            dataSourceId: request.body.dataSourceMDSId,
+          })
         );
         return response.ok({
           body: runResponse,
