@@ -428,6 +428,13 @@ export const Paragraphs = forwardRef((props: ParagraphProps, ref) => {
               props.addPara(idx, '', 'VISUALIZATION');
             },
           },
+          {
+            name: 'Deep Research',
+            onClick: () => {
+              setIsPopoverOpen(false);
+              props.addPara(idx, '', 'DEEP_RESEARCH');
+            },
+          },
         ],
       },
       {
@@ -446,6 +453,13 @@ export const Paragraphs = forwardRef((props: ParagraphProps, ref) => {
             onClick: () => {
               setIsPopoverOpen(false);
               props.addPara(idx + 1, '', 'VISUALIZATION');
+            },
+          },
+          {
+            name: 'Deep Research',
+            onClick: () => {
+              setIsPopoverOpen(false);
+              props.addPara(idx + 1, '', 'DEEP_RESEARCH');
             },
           },
         ],
