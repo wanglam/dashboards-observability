@@ -1336,7 +1336,7 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
                           description="Use deep research to analytics question."
                           footer={
                             <EuiSmallButton
-                              onClick={() => this.addPara(0, '', 'Deep Research')}
+                              onClick={() => this.addPara(0, '', ParagraphTypeDeepResearch)}
                               style={{ marginBottom: 17 }}
                             >
                               Add deep research
