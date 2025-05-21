@@ -15,39 +15,54 @@ const getMLCommonsTask = async ({
   http,
   taskId,
   signal,
+  dataSourceId,
 }: {
   http: CoreStart['http'];
   taskId: string;
   signal?: AbortSignal;
+  dataSourceId?: string;
 }) =>
   http.get(OBSERVABILITY_ML_COMMONS_API.singleTask.replace('{taskId}', taskId), {
     signal,
+    query: {
+      data_source_id: dataSourceId,
+    },
   });
 
 const getMemory = async ({
   http,
   memoryId,
   signal,
+  dataSourceId,
 }: {
   http: CoreStart['http'];
   memoryId: string;
   signal?: AbortSignal;
+  dataSourceId?: string;
 }) =>
   http.get(`/api/assistant/conversation/${memoryId}`, {
     signal,
+    query: {
+      dataSourceId,
+    },
   });
 
 const getTrace = async ({
   http,
   interactionId,
   signal,
+  dataSourceId,
 }: {
   http: CoreStart['http'];
   interactionId: string;
   signal?: AbortSignal;
+  dataSourceId?: string;
 }) =>
   http.get(`/api/assistant/trace/${interactionId}`, {
     signal,
+    query: {
+      dataSourceId,
+    },
   });
 
 interface Props {
@@ -91,6 +106,7 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
         http,
         interactionId,
         signal: abortController.signal,
+        dataSourceId: para.dataSourceMDSId,
       });
       if (!canceled) {
         setTraces(loadedTraces);
@@ -98,7 +114,12 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
     };
 
     const fetchTraceAndFinalResponse = async () => {
-      const task = await getMLCommonsTask({ http, taskId, signal: abortController.signal });
+      const task = await getMLCommonsTask({
+        http,
+        taskId,
+        signal: abortController.signal,
+        dataSourceId: para.dataSourceMDSId,
+      });
       if (canceled) {
         return;
       }
@@ -127,7 +148,12 @@ ${task.response.error_message}
         return;
       }
       if (!interactionId) {
-        const memory = await getMemory({ http, memoryId, signal: abortController.signal });
+        const memory = await getMemory({
+          http,
+          memoryId,
+          signal: abortController.signal,
+          dataSourceId: para.dataSourceMDSId,
+        });
         if (memory.interactions[0]) {
           interactionId = memory.interactions[0].interaction_id;
           setTracesVisible(true);
@@ -151,7 +177,7 @@ ${task.response.error_message}
       abortController.abort();
       canceled = true;
     };
-  }, [savedTask, http]);
+  }, [savedTask, http, para.dataSourceMDSId]);
 
   const finalMarkdown = `
   ${
@@ -194,13 +220,17 @@ ${finalMessage}
               return;
             }
             if (traces.length === 0) {
-              console.log(savedTask);
-              const memory = await getMemory({ http, memoryId: savedTask.response.memory_id });
+              const memory = await getMemory({
+                http,
+                memoryId: savedTask.response.memory_id,
+                dataSourceId: para.dataSourceMDSId,
+              });
               const interactionId = memory.interactions[0].interaction_id;
               setTraces(
                 await getTrace({
                   http,
                   interactionId,
+                  dataSourceId: para.dataSourceMDSId,
                 })
               );
             }

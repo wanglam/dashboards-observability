@@ -13,7 +13,7 @@ import { getOpenSearchClientTransport } from '../utils';
 
 export function registerMLCommonsRoutes(router: IRouter) {
   /**
-   * Returns whether the PPL agent is configured.
+   * Returns single task detailed.
    */
   router.get(
     {
@@ -41,6 +41,55 @@ export function registerMLCommonsRoutes(router: IRouter) {
         });
         return response.ok({ body });
       } catch (e) {
+        return response.badRequest({ body: e.message });
+      }
+    }
+  );
+
+  /**
+   * Returns list of agents
+   */
+  router.get(
+    {
+      path: OBSERVABILITY_ML_COMMONS_API.agents,
+      validate: {
+        query: schema.maybe(
+          schema.object({
+            data_source_id: schema.maybe(schema.string()),
+            types: schema.maybe(schema.oneOf([schema.string(), schema.arrayOf(schema.string())])),
+          })
+        ),
+      },
+    },
+    async (context, request, response) => {
+      const transport = await getOpenSearchClientTransport({
+        context,
+        dataSourceId: request.query?.data_source_id,
+      });
+      const types = Array.isArray(request.query?.types)
+        ? request.query.types
+        : request.query?.types
+        ? [request.query.types]
+        : [];
+      try {
+        const { body } = await transport.request({
+          method: 'POST',
+          path: OPENSEARCH_ML_COMMONS_API.agentsSearch,
+          body: types
+            ? {
+                query: {
+                  terms: {
+                    type: types,
+                  },
+                },
+              }
+            : {},
+        });
+        return response.ok({ body });
+      } catch (e) {
+        if (e.meta.body.status === 404) {
+          return response.ok({ body: { hits: { hits: [] } } });
+        }
         return response.badRequest({ body: e.message });
       }
     }
