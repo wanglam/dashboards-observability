@@ -609,7 +609,14 @@ export const Paragraphs = forwardRef((props: ParagraphProps, ref) => {
   return (
     <>
       <EuiPanel>
-        {renderParaHeader(!para.isVizualisation ? 'Code block' : 'Visualization', index)}
+        {renderParaHeader(
+          para.isDeepResearch
+            ? 'Deep Research'
+            : !para.isVizualisation
+            ? 'Code block'
+            : 'Visualization',
+          index
+        )}
         {dataSourceEnabled && !para.isVizualisation && (
           <DataSourceSelector
             savedObjectsClient={savedObjectsMDSClient.client}
