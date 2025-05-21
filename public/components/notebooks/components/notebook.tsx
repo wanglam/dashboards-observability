@@ -522,7 +522,9 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
     para: ParaType,
     index: number,
     vizObjectInput?: string,
-    paraType?: string
+    paraType?: string,
+    _dataSourceMDSId?: string,
+    deepResearchAgentId?: string
   ) => {
     this.showParagraphRunning(index);
     if (vizObjectInput) {
@@ -536,6 +538,7 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
       paragraphType: paraType || '',
       dataSourceMDSId: this.state.dataSourceMDSId || '',
       dataSourceMDSLabel: this.state.dataSourceMDSLabel || '',
+      deepResearchAgentId,
     };
     const isValid = isValidUUID(this.props.openedNoteId);
     const route = isValid

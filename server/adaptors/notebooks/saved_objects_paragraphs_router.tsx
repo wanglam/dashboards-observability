@@ -148,17 +148,19 @@ export async function updateRunFetchParagraph(
     dataSourceMDSLabel: string | undefined;
   },
   opensearchNotebooksClient: SavedObjectsClientContract,
-  transport: OpenSearchClient['transport']
+  transport: OpenSearchClient['transport'],
+  deepResearchAgentId: string | undefined
 ) {
-  let deepResearchAgentId;
-  try {
-    const { body } = await transport.request({
-      method: 'GET',
-      path: '/_plugins/_ml/config/os_deep_research',
-    });
-    deepResearchAgentId = body.configuration.agent_id;
-  } catch (error) {
-    // Add error catch here..
+  if (!deepResearchAgentId) {
+    try {
+      const { body } = await transport.request({
+        method: 'GET',
+        path: '/_plugins/_ml/config/os_deep_research',
+      });
+      deepResearchAgentId = body.configuration.agent_id;
+    } catch (error) {
+      // Add error catch here..
+    }
   }
   try {
     const notebookinfo = await fetchNotebook(params.noteId, opensearchNotebooksClient);

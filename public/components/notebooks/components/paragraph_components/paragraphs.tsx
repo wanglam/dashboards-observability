@@ -51,6 +51,7 @@ import { SavedObjectsActions } from '../../../../services/saved_objects/saved_ob
 import { ObservabilitySavedVisualization } from '../../../../services/saved_objects/saved_object_client/types';
 import { ParaInput } from './para_input';
 import { ParaOutput } from './para_output';
+import { AgentsSelector } from './agents_selector';
 
 /*
  * "Paragraphs" component is used to render cells of the notebook open and "add para div" between paragraphs
@@ -103,7 +104,8 @@ interface ParagraphProps {
     index: number,
     vizObjectInput?: string,
     paraType?: string,
-    dataSourceMDSId?: string
+    dataSourceMDSId?: string,
+    deepResearchAgentId?: string
   ) => void;
   clonePara: (para: ParaType, index: number) => void;
   movePara: (index: number, targetIndex: number) => void;
@@ -153,6 +155,7 @@ export const Paragraphs = forwardRef((props: ParagraphProps, ref) => {
   const [visInput, setVisInput] = useState(undefined);
   const [visType, setVisType] = useState('');
   const [dataSourceMDSId, setDataSourceMDSId] = useState('');
+  const [deepSearchAgentId, setDeepSearchAgentId] = useState<string>();
 
   // output is available if it's not cleared and vis paragraph has a selected visualization
   const isOutputAvailable =
@@ -303,7 +306,14 @@ export const Paragraphs = forwardRef((props: ParagraphProps, ref) => {
       newVisObjectInput = JSON.stringify(inputTemp);
     }
     setRunParaError(false);
-    return props.runPara(para, index, newVisObjectInput, visType, dataSourceMDSId);
+    return props.runPara(
+      para,
+      index,
+      newVisObjectInput,
+      visType,
+      dataSourceMDSId,
+      deepSearchAgentId
+    );
   };
 
   const setStartTime = (time: string) => {
@@ -599,6 +609,7 @@ export const Paragraphs = forwardRef((props: ParagraphProps, ref) => {
   const onSelectedDataSource = (e) => {
     const dataConnectionId = e[0] ? e[0].id : undefined;
     const dataConnectionLabel = e[0] ? e[0].label : undefined;
+    setDeepSearchAgentId('');
     setDataSourceMDSId(dataConnectionId);
     handleSelectedDataSourceChange(dataConnectionId, dataConnectionLabel);
   };
@@ -606,6 +617,7 @@ export const Paragraphs = forwardRef((props: ParagraphProps, ref) => {
   if (dataSourceEnabled) {
     DataSourceSelector = dataSourceManagement.ui.DataSourceSelector;
   }
+
   return (
     <>
       <EuiPanel>
@@ -618,20 +630,34 @@ export const Paragraphs = forwardRef((props: ParagraphProps, ref) => {
           index
         )}
         {dataSourceEnabled && !para.isVizualisation && (
-          <DataSourceSelector
-            savedObjectsClient={savedObjectsMDSClient.client}
-            notifications={notifications}
-            onSelectedDataSource={onSelectedDataSource}
-            disabled={false}
-            fullWidth={false}
-            removePrepend={false}
-            defaultOption={
-              paradataSourceMDSId !== undefined && [
-                { id: paradataSourceMDSId, label: dataSourceMDSLabel },
-              ]
-            }
-            dataSourceFilter={dataSourceFilterFn}
-          />
+          <EuiFlexGroup>
+            <EuiFlexItem>
+              <DataSourceSelector
+                savedObjectsClient={savedObjectsMDSClient.client}
+                notifications={notifications}
+                onSelectedDataSource={onSelectedDataSource}
+                disabled={false}
+                fullWidth={false}
+                removePrepend={false}
+                defaultOption={
+                  paradataSourceMDSId !== undefined && [
+                    { id: paradataSourceMDSId, label: dataSourceMDSLabel },
+                  ]
+                }
+                dataSourceFilter={dataSourceFilterFn}
+              />
+            </EuiFlexItem>
+            {para.isDeepResearch && (
+              <EuiFlexItem>
+                <AgentsSelector
+                  http={http}
+                  value={deepSearchAgentId}
+                  dataSourceMDSId={dataSourceMDSId}
+                  onChange={setDeepSearchAgentId}
+                />
+              </EuiFlexItem>
+            )}
+          </EuiFlexGroup>
         )}
         <EuiSpacer size="s" />
         {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events */}

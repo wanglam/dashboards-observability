@@ -129,6 +129,7 @@ export function registerParaRoute(router: IRouter) {
           paragraphType: schema.string(),
           dataSourceMDSId: schema.maybe(schema.string({ defaultValue: '' })),
           dataSourceMDSLabel: schema.maybe(schema.string({ defaultValue: '' })),
+          deepResearchAgentId: schema.maybe(schema.string()),
         }),
       },
     },
@@ -144,7 +145,8 @@ export function registerParaRoute(router: IRouter) {
           await getOpenSearchClientTransport({
             context,
             dataSourceId: request.body.dataSourceMDSId,
-          })
+          }),
+          request.body.deepResearchAgentId
         );
         return response.ok({
           body: runResponse,
