@@ -155,7 +155,7 @@ export const Paragraphs = forwardRef((props: ParagraphProps, ref) => {
   const [visInput, setVisInput] = useState(undefined);
   const [visType, setVisType] = useState('');
   const [dataSourceMDSId, setDataSourceMDSId] = useState('');
-  const [deepSearchAgentId, setDeepSearchAgentId] = useState<string>();
+  const [deepResearchAgentId, setDeepResearchAgentId] = useState<string>();
 
   // output is available if it's not cleared and vis paragraph has a selected visualization
   const isOutputAvailable =
@@ -312,7 +312,7 @@ export const Paragraphs = forwardRef((props: ParagraphProps, ref) => {
       newVisObjectInput,
       visType,
       dataSourceMDSId,
-      deepSearchAgentId
+      deepResearchAgentId
     );
   };
 
@@ -609,7 +609,7 @@ export const Paragraphs = forwardRef((props: ParagraphProps, ref) => {
   const onSelectedDataSource = (e) => {
     const dataConnectionId = e[0] ? e[0].id : undefined;
     const dataConnectionLabel = e[0] ? e[0].label : undefined;
-    setDeepSearchAgentId('');
+    setDeepResearchAgentId(undefined);
     setDataSourceMDSId(dataConnectionId);
     handleSelectedDataSourceChange(dataConnectionId, dataConnectionLabel);
   };
@@ -651,9 +651,9 @@ export const Paragraphs = forwardRef((props: ParagraphProps, ref) => {
               <EuiFlexItem>
                 <AgentsSelector
                   http={http}
-                  value={deepSearchAgentId}
+                  value={deepResearchAgentId}
                   dataSourceMDSId={dataSourceMDSId}
-                  onChange={setDeepSearchAgentId}
+                  onChange={setDeepResearchAgentId}
                 />
               </EuiFlexItem>
             )}

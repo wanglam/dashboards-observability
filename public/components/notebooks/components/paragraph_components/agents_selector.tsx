@@ -46,5 +46,14 @@ export const AgentsSelector = ({
     [agents, value]
   );
 
-  return <EuiSelect prepend="Agent" options={options} placeholder="Select a agent" />;
+  return (
+    <EuiSelect
+      prepend="Agent"
+      options={options}
+      placeholder="Select a agent"
+      onChange={(e) => {
+        onChange(e.target.value);
+      }}
+    />
+  );
 };
