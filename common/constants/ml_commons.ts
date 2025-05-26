@@ -7,6 +7,8 @@ const OBSERVABILITY_ML_COMMONS_API_PREFIX = '/api/observability/ml-commons';
 export const OBSERVABILITY_ML_COMMONS_API = {
   singleTask: `${OBSERVABILITY_ML_COMMONS_API_PREFIX}/tasks/{taskId}`,
   agents: `${OBSERVABILITY_ML_COMMONS_API_PREFIX}/agents`,
+  memoryMessages: `${OBSERVABILITY_ML_COMMONS_API_PREFIX}/memory/{memoryId}/messages`,
+  messageTraces: `${OBSERVABILITY_ML_COMMONS_API_PREFIX}/memory/message/{messageId}/traces`,
 };
 
 const OPENSEARCH_ML_COMMONS_API_PREFIX = '/_plugins/_ml';
@@ -14,4 +16,6 @@ const OPENSEARCH_ML_COMMONS_API_PREFIX = '/_plugins/_ml';
 export const OPENSEARCH_ML_COMMONS_API = {
   singleTask: `${OPENSEARCH_ML_COMMONS_API_PREFIX}/tasks/{taskId}`,
   agentsSearch: `${OPENSEARCH_ML_COMMONS_API_PREFIX}/agents/_search`,
+  memoryMessages: `${OPENSEARCH_ML_COMMONS_API_PREFIX}/memory/{memoryId}/messages`,
+  messageTraces: `${OPENSEARCH_ML_COMMONS_API_PREFIX}/memory/message/{messageId}/traces`,
 };
