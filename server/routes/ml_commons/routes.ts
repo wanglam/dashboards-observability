@@ -94,4 +94,84 @@ export function registerMLCommonsRoutes(router: IRouter) {
       }
     }
   );
+
+  /**
+   * Returns messages of memory
+   */
+  router.get(
+    {
+      path: OBSERVABILITY_ML_COMMONS_API.memoryMessages,
+      validate: {
+        params: schema.object({
+          memoryId: schema.string(),
+        }),
+        query: schema.maybe(
+          schema.object({
+            data_source_id: schema.maybe(schema.string()),
+          })
+        ),
+      },
+    },
+    async (context, request, response) => {
+      const transport = await getOpenSearchClientTransport({
+        context,
+        dataSourceId: request.query?.data_source_id,
+      });
+      try {
+        const { body } = await transport.request({
+          method: 'GET',
+          path: OPENSEARCH_ML_COMMONS_API.memoryMessages.replace(
+            `{memoryId}`,
+            request.params.memoryId
+          ),
+        });
+        return response.ok({ body: body.messages });
+      } catch (e) {
+        if (e.meta.body.status === 404) {
+          return response.ok({ body: [] });
+        }
+        return response.badRequest({ body: e.message });
+      }
+    }
+  );
+
+  /**
+   * Returns traces of message
+   */
+  router.get(
+    {
+      path: OBSERVABILITY_ML_COMMONS_API.messageTraces,
+      validate: {
+        params: schema.object({
+          messageId: schema.string(),
+        }),
+        query: schema.maybe(
+          schema.object({
+            data_source_id: schema.maybe(schema.string()),
+          })
+        ),
+      },
+    },
+    async (context, request, response) => {
+      const transport = await getOpenSearchClientTransport({
+        context,
+        dataSourceId: request.query?.data_source_id,
+      });
+      try {
+        const { body } = await transport.request({
+          method: 'GET',
+          path: OPENSEARCH_ML_COMMONS_API.messageTraces.replace(
+            `{messageId}`,
+            request.params.messageId
+          ),
+        });
+        return response.ok({ body: body.traces });
+      } catch (e) {
+        if (e.meta.body.status === 404) {
+          return response.ok({ body: [] });
+        }
+        return response.badRequest({ body: e.message });
+      }
+    }
+  );
 }

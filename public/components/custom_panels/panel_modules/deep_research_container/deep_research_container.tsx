@@ -4,66 +4,20 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import MarkdownRender from '@nteract/markdown';
-import { EuiButton, EuiLoadingContent, EuiText } from '@elastic/eui';
+import {
+  EuiButton,
+  EuiLoadingContent,
+  EuiText,
+  EuiAccordion,
+  EuiSpacer,
+  EuiTitle,
+} from '@elastic/eui';
 
 import { CoreStart } from '../../../../../../../src/core/public';
-
 import { ParaType } from '../../../../../common/types/notebooks';
-import { OBSERVABILITY_ML_COMMONS_API } from '../../../../../common/constants/ml_commons';
 
-const getMLCommonsTask = async ({
-  http,
-  taskId,
-  signal,
-  dataSourceId,
-}: {
-  http: CoreStart['http'];
-  taskId: string;
-  signal?: AbortSignal;
-  dataSourceId?: string;
-}) =>
-  http.get(OBSERVABILITY_ML_COMMONS_API.singleTask.replace('{taskId}', taskId), {
-    signal,
-    query: {
-      data_source_id: dataSourceId,
-    },
-  });
-
-const getMemory = async ({
-  http,
-  memoryId,
-  signal,
-  dataSourceId,
-}: {
-  http: CoreStart['http'];
-  memoryId: string;
-  signal?: AbortSignal;
-  dataSourceId?: string;
-}) =>
-  http.get(`/api/assistant/conversation/${memoryId}`, {
-    signal,
-    query: {
-      dataSourceId,
-    },
-  });
-
-const getTrace = async ({
-  http,
-  interactionId,
-  signal,
-  dataSourceId,
-}: {
-  http: CoreStart['http'];
-  interactionId: string;
-  signal?: AbortSignal;
-  dataSourceId?: string;
-}) =>
-  http.get(`/api/assistant/trace/${interactionId}`, {
-    signal,
-    query: {
-      dataSourceId,
-    },
-  });
+import { getMLCommonsTask, getMLCommonsMemoryMessages, getMLCommonsMessageTraces } from './apis';
+import { MessageTraceModal } from './message_trace_modal';
 
 interface Props {
   http: CoreStart['http'];
@@ -71,10 +25,13 @@ interface Props {
 }
 
 export const DeepResearchContainer = ({ para, http }: Props) => {
-  const [finalMessage, setFinalMessage] = useState<string>();
   const [traces, setTraces] = useState([]);
+  const [task, setTask] = useState();
   const [isLoading, setIsLoading] = useState(false);
   const [tracesVisible, setTracesVisible] = useState(false);
+  const [executorMessages, setExecutorMessages] = useState();
+  const [loadingExecutorMessages, setIsLoadingExecutorMessages] = useState(false);
+  const [messageIdForTraceModal, setMessageIdForTraceModal] = useState<string>();
 
   const savedTask = useMemo(() => {
     if (para.out[0]) {
@@ -86,6 +43,32 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
     }
   }, [para.out[0]]);
 
+  const finalMessage = useMemo(() => {
+    if (!task) {
+      return '';
+    }
+    if (task.state === 'COMPLETED') {
+      const inferenceResult = task.response.inference_results[0];
+      if (inferenceResult) {
+        return inferenceResult.output.find(({ name }) => name === 'response').dataAsMap.response;
+      }
+      return 'Task was completed, but failed to load inference result.';
+    }
+
+    if (task.state === 'FAILED') {
+      return `Failed to execute task, reason: ${task.response.error_message}`.trim();
+    }
+    return '';
+  }, [task]);
+
+  const executorMemoryId = useMemo(() => {
+    const inferenceResult = task?.response?.inference_results?.[0];
+    if (!inferenceResult) {
+      return;
+    }
+    return inferenceResult.output.find(({ name }) => name === 'executor_agent_memory_id').result;
+  }, [task]);
+
   useEffect(() => {
     if (!savedTask) {
       return;
@@ -95,16 +78,16 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
       response: { memory_id: memoryId },
     } = savedTask;
     let canceled = false;
-    let interactionId: string | undefined;
+    let messageId: string | undefined;
     const abortController = new AbortController();
 
     const loadTraces = async () => {
-      if (!interactionId) {
+      if (!messageId) {
         return;
       }
-      const loadedTraces = await getTrace({
+      const loadedTraces = await getMLCommonsMessageTraces({
         http,
-        interactionId,
+        messageId,
         signal: abortController.signal,
         dataSourceId: para.dataSourceMDSId,
       });
@@ -114,7 +97,7 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
     };
 
     const fetchTraceAndFinalResponse = async () => {
-      const task = await getMLCommonsTask({
+      const loadedTask = await getMLCommonsTask({
         http,
         taskId,
         signal: abortController.signal,
@@ -123,39 +106,29 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
       if (canceled) {
         return;
       }
-      if (task.state === 'COMPLETED') {
-        const inferenceResult = task.response.inference_results[0];
-        if (inferenceResult) {
-          setFinalMessage(
-            inferenceResult.output.find(({ name }) => name === 'response').dataAsMap.response
-          );
-          await loadTraces();
-        }
-        setIsLoading(false);
-        setTracesVisible(false);
-        return;
-      }
-      if (task.state === 'FAILED') {
-        setFinalMessage(
-          `
-#### Failed to generate
-${task.response.error_message}
-`.trim()
-        );
+      if (loadedTask.state === 'COMPLETED') {
+        setTask(loadedTask);
         await loadTraces();
         setIsLoading(false);
         setTracesVisible(false);
         return;
       }
-      if (!interactionId) {
-        const memory = await getMemory({
+      if (loadedTask.state === 'FAILED') {
+        setTask(loadedTask);
+        await loadTraces();
+        setIsLoading(false);
+        setTracesVisible(false);
+        return;
+      }
+      if (!messageId) {
+        const memoryMessages = await getMLCommonsMemoryMessages({
           http,
           memoryId,
           signal: abortController.signal,
           dataSourceId: para.dataSourceMDSId,
         });
-        if (memory.interactions[0]) {
-          interactionId = memory.interactions[0].interaction_id;
+        if (memoryMessages[0]) {
+          messageId = memoryMessages[0].message_id;
           setTracesVisible(true);
         }
       }
@@ -179,38 +152,64 @@ ${task.response.error_message}
     };
   }, [savedTask, http, para.dataSourceMDSId]);
 
-  const finalMarkdown = `
-  ${
-    tracesVisible
-      ? traces
-          .map(({ input, output, traceNumber }) =>
-            `
-### Step ${traceNumber}
-#### Step Input
-${input}
-#### Step Output
-${output}
-  `.trim()
-          )
-          .join('\n')
-      : ''
-  }
-
-  ${
-    finalMessage
-      ? `
-### Final response
-${finalMessage}
-    `
-      : ''
-  }
-  `.trim();
+  const renderTraces = () => {
+    return traces.map(({ input, response, message_id: messageId }, index) => (
+      <React.Fragment key={messageId}>
+        <EuiAccordion
+          id={`trace-${index}`}
+          buttonContent={`Step ${index + 1} - ${input}`}
+          paddingSize="l"
+        >
+          <EuiText className="wrapAll markdown-output-text" size="s">
+            <MarkdownRender source={response} />
+          </EuiText>
+          {executorMemoryId && (
+            <EuiButton
+              isLoading={loadingExecutorMessages}
+              disabled={loadingExecutorMessages}
+              onClick={async () => {
+                let messages = executorMessages;
+                if (!executorMessages) {
+                  setIsLoadingExecutorMessages(true);
+                  try {
+                    messages = await getMLCommonsMemoryMessages({
+                      http,
+                      memoryId: executorMemoryId,
+                      dataSourceId: para.dataSourceMDSId,
+                    });
+                    setExecutorMessages(messages);
+                  } finally {
+                    setIsLoadingExecutorMessages(false);
+                  }
+                }
+                if (messages && messages[index].message_id) {
+                  setMessageIdForTraceModal(messages[index].message_id);
+                }
+              }}
+            >
+              Explain this step
+            </EuiButton>
+          )}
+        </EuiAccordion>
+        <EuiSpacer />
+      </React.Fragment>
+    ));
+  };
 
   return (
     <div>
-      <EuiText className="wrapAll markdown-output-text" size="s">
-        <MarkdownRender source={finalMarkdown} />
-      </EuiText>
+      {tracesVisible && renderTraces()}
+      {finalMessage && (
+        <>
+          <EuiTitle>
+            <h3>Final response</h3>
+          </EuiTitle>
+          <EuiText className="wrapAll markdown-output-text" size="s">
+            {finalMessage}
+          </EuiText>
+          <EuiSpacer />
+        </>
+      )}
       {isLoading ? (
         <EuiLoadingContent />
       ) : (
@@ -220,16 +219,16 @@ ${finalMessage}
               return;
             }
             if (traces.length === 0) {
-              const memory = await getMemory({
+              const memoryMessages = await getMLCommonsMemoryMessages({
                 http,
                 memoryId: savedTask.response.memory_id,
                 dataSourceId: para.dataSourceMDSId,
               });
-              const interactionId = memory.interactions[0].interaction_id;
+              const messageId = memoryMessages[0].message_id;
               setTraces(
-                await getTrace({
+                await getMLCommonsMessageTraces({
                   http,
-                  interactionId,
+                  messageId,
                   dataSourceId: para.dataSourceMDSId,
                 })
               );
@@ -240,6 +239,16 @@ ${finalMessage}
         >
           {tracesVisible ? 'Hide traces' : 'Show traces'}
         </EuiButton>
+      )}
+      {messageIdForTraceModal && (
+        <MessageTraceModal
+          messageId={messageIdForTraceModal}
+          http={http}
+          closeModal={() => {
+            setMessageIdForTraceModal(undefined);
+          }}
+          dataSourceId={para.dataSourceMDSId}
+        />
       )}
     </div>
   );
