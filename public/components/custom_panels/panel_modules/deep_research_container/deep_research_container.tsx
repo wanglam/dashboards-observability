@@ -16,8 +16,53 @@ import {
 import { CoreStart } from '../../../../../../../src/core/public';
 import { ParaType } from '../../../../../common/types/notebooks';
 
-import { getMLCommonsTask, getMLCommonsMemoryMessages, getMLCommonsMessageTraces } from './apis';
+import {
+  getMLCommonsTask,
+  getMLCommonsMemoryMessages,
+  getMLCommonsMessageTraces,
+  getMLCommonsMemory,
+  getMLCommonsSingleMemory,
+} from './apis';
 import { MessageTraceModal } from './message_trace_modal';
+
+const getGuessExecutorMemoryId = async ({
+  http,
+  dataSourceId,
+  memoryId,
+  signal,
+}: {
+  http: CoreStart['http'];
+  memoryId: string;
+  dataSourceId?: string;
+  signal?: AbortSignal;
+}) => {
+  const memory = await getMLCommonsSingleMemory({
+    http,
+    dataSourceId,
+    memoryId,
+    signal,
+  });
+  const result = await getMLCommonsMemory({
+    http,
+    dataSourceId,
+    query: {
+      bool: {
+        filter: [
+          {
+            range: {
+              create_time: {
+                gt: memory.create_time,
+              },
+            },
+          },
+        ],
+      },
+    },
+    size: 1,
+    signal,
+  });
+  return result?.hits?.hits[0]?._id;
+};
 
 interface Props {
   http: CoreStart['http'];
@@ -32,6 +77,7 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
   const [executorMessages, setExecutorMessages] = useState();
   const [loadingExecutorMessages, setIsLoadingExecutorMessages] = useState(false);
   const [messageIdForTraceModal, setMessageIdForTraceModal] = useState<string>();
+  const [guessExecutorMemoryId, setGuessExecutorMemoryId] = useState<string>();
 
   const savedTask = useMemo(() => {
     if (para.out[0]) {
@@ -163,18 +209,18 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
           <EuiText className="wrapAll markdown-output-text" size="s">
             <MarkdownRender source={response} />
           </EuiText>
-          {executorMemoryId && (
+          {(guessExecutorMemoryId || executorMemoryId) && (
             <EuiButton
               isLoading={loadingExecutorMessages}
               disabled={loadingExecutorMessages}
               onClick={async () => {
                 let messages = executorMessages;
-                if (!executorMessages) {
+                if (!messages || messages.length < traces.length) {
                   setIsLoadingExecutorMessages(true);
                   try {
                     messages = await getMLCommonsMemoryMessages({
                       http,
-                      memoryId: executorMemoryId,
+                      memoryId: executorMemoryId || guessExecutorMemoryId,
                       dataSourceId: para.dataSourceMDSId,
                     });
                     setExecutorMessages(messages);
@@ -182,7 +228,7 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
                     setIsLoadingExecutorMessages(false);
                   }
                 }
-                if (messages && messages[index].message_id) {
+                if (messages && messages[index]?.message_id) {
                   setMessageIdForTraceModal(messages[index].message_id);
                 }
               }}
@@ -195,6 +241,34 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
       </React.Fragment>
     ));
   };
+
+  const atLeastOneTraceGenerated = traces.length > 0;
+
+  useEffect(() => {
+    if (!savedTask || !tracesVisible || !atLeastOneTraceGenerated) {
+      return;
+    }
+    let canceled = false;
+    const {
+      response: { memory_id: memoryId },
+    } = savedTask;
+    const abortController = new AbortController();
+
+    getGuessExecutorMemoryId({
+      http,
+      dataSourceId: para.dataSourceMDSId,
+      memoryId,
+      signal: abortController.signal,
+    }).then((id) => {
+      if (!canceled) {
+        setGuessExecutorMemoryId(id);
+      }
+    });
+    return () => {
+      canceled = true;
+      abortController.abort();
+    };
+  }, [http, para.dataSourceMDSId, savedTask, tracesVisible, atLeastOneTraceGenerated]);
 
   return (
     <div>

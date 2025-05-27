@@ -47,7 +47,7 @@ export const MessageTraceModal = ({
   }, [messageId, http, dataSourceId]);
 
   const renderTraces = () => {
-    return traces.map(({ input, response, message_id: traceMessageId }, index) => (
+    return traces.map(({ input, response, message_id: traceMessageId, origin }, index) => (
       <React.Fragment key={traceMessageId}>
         <EuiAccordion
           id={`trace-${index}`}
@@ -55,7 +55,7 @@ export const MessageTraceModal = ({
           paddingSize="l"
         >
           <EuiText className="wrapAll markdown-output-text" size="s">
-            <MarkdownRender source={response} />
+            {response ? <MarkdownRender source={response} /> : `No response from: ${origin}`}
           </EuiText>
         </EuiAccordion>
         <EuiSpacer />

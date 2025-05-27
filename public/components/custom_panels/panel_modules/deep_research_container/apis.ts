@@ -24,6 +24,49 @@ export const getMLCommonsTask = async ({
     },
   });
 
+export const getMLCommonsMemory = async ({
+  http,
+  signal,
+  dataSourceId,
+  query,
+  size,
+  sort,
+}: {
+  http: CoreStart['http'];
+  signal?: AbortSignal;
+  dataSourceId?: string;
+  query?: { [key: string]: any };
+  size?: number;
+  sort?: { [key: string]: 'asc' | 'desc' };
+}) =>
+  http.get(OBSERVABILITY_ML_COMMONS_API.memory, {
+    signal,
+    query: {
+      data_source_id: dataSourceId,
+      ...(query ? { query: JSON.stringify(query) } : {}),
+      ...(size ? { size } : {}),
+      ...(sort ? { query: JSON.stringify(sort) } : {}),
+    },
+  });
+
+export const getMLCommonsSingleMemory = async ({
+  http,
+  signal,
+  dataSourceId,
+  memoryId,
+}: {
+  http: CoreStart['http'];
+  signal?: AbortSignal;
+  dataSourceId?: string;
+  memoryId: string;
+}) =>
+  http.get(OBSERVABILITY_ML_COMMONS_API.singleMemory.replace('{memoryId}', memoryId), {
+    signal,
+    query: {
+      data_source_id: dataSourceId,
+    },
+  });
+
 export const getMLCommonsMemoryMessages = async ({
   http,
   memoryId,

@@ -174,4 +174,96 @@ export function registerMLCommonsRoutes(router: IRouter) {
       }
     }
   );
+
+  /**
+   * Returns list of memories
+   */
+  router.get(
+    {
+      path: OBSERVABILITY_ML_COMMONS_API.memory,
+      validate: {
+        query: schema.maybe(
+          schema.object({
+            data_source_id: schema.maybe(schema.string()),
+            query: schema.maybe(
+              schema.object(
+                {},
+                {
+                  unknowns: 'allow',
+                }
+              )
+            ),
+            size: schema.maybe(schema.number()),
+            sort: schema.maybe(schema.mapOf(schema.string(), schema.any())),
+          })
+        ),
+      },
+    },
+    async (context, request, response) => {
+      const transport = await getOpenSearchClientTransport({
+        context,
+        dataSourceId: request.query?.data_source_id,
+      });
+      console.log(
+        'request.query?.query:',
+        request.query?.query,
+        JSON.stringify(request.query?.query)
+      );
+      try {
+        const { body } = await transport.request({
+          method: 'POST',
+          path: OPENSEARCH_ML_COMMONS_API.memorySearch,
+          body: {
+            query: request.query?.query ? request.query.query : { match_all: {} },
+            // query: { match_all: {} },
+            ...(request.query?.size ? { size: request.query?.size } : {}),
+            ...(request.query?.sort ? { sort: [request.query.sort] } : {}),
+          },
+        });
+        return response.ok({ body });
+      } catch (e) {
+        if (e.meta.body.status === 404) {
+          return response.ok({ body: { hits: { hits: [] } } });
+        }
+        return response.badRequest({ body: e.message });
+      }
+    }
+  );
+
+  /**
+   * Returns single task detailed.
+   */
+  router.get(
+    {
+      path: OBSERVABILITY_ML_COMMONS_API.singleMemory,
+      validate: {
+        params: schema.object({
+          memoryId: schema.string(),
+        }),
+        query: schema.maybe(
+          schema.object({
+            data_source_id: schema.maybe(schema.string()),
+          })
+        ),
+      },
+    },
+    async (context, request, response) => {
+      const transport = await getOpenSearchClientTransport({
+        context,
+        dataSourceId: request.query?.data_source_id,
+      });
+      try {
+        const { body } = await transport.request({
+          method: 'GET',
+          path: OPENSEARCH_ML_COMMONS_API.singleMemory.replace(
+            '{memoryId}',
+            request.params.memoryId
+          ),
+        });
+        return response.ok({ body });
+      } catch (e) {
+        return response.badRequest({ body: e.message });
+      }
+    }
+  );
 }
