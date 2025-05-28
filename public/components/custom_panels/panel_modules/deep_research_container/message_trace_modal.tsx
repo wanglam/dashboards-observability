@@ -17,7 +17,7 @@ import {
   EuiLoadingContent,
 } from '@elastic/eui';
 import { CoreStart } from '../../../../../../../src/core/public';
-import { getMLCommonsMessageTraces } from './apis';
+import { getAllTracesByMessageId } from './utils';
 
 export const MessageTraceModal = ({
   messageId,
@@ -33,7 +33,7 @@ export const MessageTraceModal = ({
   const [traces, setTraces] = useState([]);
   useEffect(() => {
     const abortController = new AbortController();
-    getMLCommonsMessageTraces({
+    getAllTracesByMessageId({
       http,
       messageId,
       signal: abortController.signal,

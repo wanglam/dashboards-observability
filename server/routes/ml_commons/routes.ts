@@ -148,6 +148,7 @@ export function registerMLCommonsRoutes(router: IRouter) {
         query: schema.maybe(
           schema.object({
             data_source_id: schema.maybe(schema.string()),
+            next_token: schema.maybe(schema.number()),
           })
         ),
       },
@@ -164,8 +165,11 @@ export function registerMLCommonsRoutes(router: IRouter) {
             `{messageId}`,
             request.params.messageId
           ),
+          querystring: {
+            next_token: request.query?.next_token,
+          },
         });
-        return response.ok({ body: body.traces });
+        return response.ok({ body });
       } catch (e) {
         if (e.meta.body.status === 404) {
           return response.ok({ body: [] });
@@ -204,11 +208,6 @@ export function registerMLCommonsRoutes(router: IRouter) {
         context,
         dataSourceId: request.query?.data_source_id,
       });
-      console.log(
-        'request.query?.query:',
-        request.query?.query,
-        JSON.stringify(request.query?.query)
-      );
       try {
         const { body } = await transport.request({
           method: 'POST',
