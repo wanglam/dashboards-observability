@@ -19,10 +19,10 @@ import { ParaType } from '../../../../../common/types/notebooks';
 import {
   getMLCommonsTask,
   getMLCommonsMemoryMessages,
-  getMLCommonsMessageTraces,
   getMLCommonsMemory,
   getMLCommonsSingleMemory,
 } from './apis';
+import { getAllTracesByMessageId } from './utils';
 import { MessageTraceModal } from './message_trace_modal';
 
 const getGuessExecutorMemoryId = async ({
@@ -131,7 +131,7 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
       if (!messageId) {
         return;
       }
-      const loadedTraces = await getMLCommonsMessageTraces({
+      const loadedTraces = await getAllTracesByMessageId({
         http,
         messageId,
         signal: abortController.signal,
@@ -300,7 +300,7 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
               });
               const messageId = memoryMessages[0].message_id;
               setTraces(
-                await getMLCommonsMessageTraces({
+                await getAllTracesByMessageId({
                   http,
                   messageId,
                   dataSourceId: para.dataSourceMDSId,
