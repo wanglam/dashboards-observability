@@ -269,10 +269,17 @@ export async function runParagraph(
               },
             },
           });
+          const memoryId = body.response?.memory_id;
           updatedParagraph.output = [
             {
               outputType: 'DEEP_RESEARCH',
-              result: JSON.stringify(body),
+              result: JSON.stringify({
+                task_id: body.task_id,
+                memory_id: memoryId,
+                agent_id: deepResearchAgentId,
+                // TODO: Remove this on production
+                response: { memory_id: body.response?.memory_id },
+              }),
               execution_time: `${(now() - startTime).toFixed(3)} ms`,
             },
           ];

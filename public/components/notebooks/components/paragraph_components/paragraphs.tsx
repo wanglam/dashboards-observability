@@ -23,7 +23,7 @@ import {
 } from '@elastic/eui';
 import filter from 'lodash/filter';
 import moment from 'moment';
-import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
   CoreStart,
   MountPoint,
@@ -155,7 +155,14 @@ export const Paragraphs = forwardRef((props: ParagraphProps, ref) => {
   const [visInput, setVisInput] = useState(undefined);
   const [visType, setVisType] = useState('');
   const [dataSourceMDSId, setDataSourceMDSId] = useState('');
-  const [deepResearchAgentId, setDeepResearchAgentId] = useState<string>();
+  const shouldSkipAgentIdResetRef = useRef(true);
+  const [deepResearchAgentId, setDeepResearchAgentId] = useState<string | undefined>(() => {
+    try {
+      return JSON.parse(para.out[0]).agent_id;
+    } catch (e) {
+      console.error('Failed to read deep research agent id:', e);
+    }
+  });
 
   // output is available if it's not cleared and vis paragraph has a selected visualization
   const isOutputAvailable =
@@ -609,7 +616,13 @@ export const Paragraphs = forwardRef((props: ParagraphProps, ref) => {
   const onSelectedDataSource = (e) => {
     const dataConnectionId = e[0] ? e[0].id : undefined;
     const dataConnectionLabel = e[0] ? e[0].label : undefined;
-    setDeepResearchAgentId(undefined);
+    if (dataConnectionId !== paradataSourceMDSId) {
+      shouldSkipAgentIdResetRef.current = false;
+    }
+    if (!shouldSkipAgentIdResetRef.current) {
+      setDeepResearchAgentId(undefined);
+    }
+    shouldSkipAgentIdResetRef.current = false;
     setDataSourceMDSId(dataConnectionId);
     handleSelectedDataSourceChange(dataConnectionId, dataConnectionLabel);
   };

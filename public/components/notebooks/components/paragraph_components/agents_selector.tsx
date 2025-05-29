@@ -4,7 +4,7 @@
  */
 
 import { EuiSelect } from '@elastic/eui';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CoreStart } from '../../../../../../../src/core/public';
 import { OBSERVABILITY_ML_COMMONS_API } from '../../../../../common/constants/ml_commons';
 
@@ -20,6 +20,8 @@ export const AgentsSelector = ({
   onChange: (value: string | undefined) => void;
 }) => {
   const [agents, setAgents] = useState([]);
+  const valueRef = useRef(value);
+
   useEffect(() => {
     let canceled = false;
     http
@@ -33,7 +35,9 @@ export const AgentsSelector = ({
         if (!canceled) {
           const agentResults = hits.hits.map(({ _id, _source: { name } }) => ({ id: _id, name }));
           setAgents(agentResults);
-          onChange(agentResults[0]?.id);
+          if (!valueRef.current) {
+            onChange(agentResults[0]?.id);
+          }
         }
       });
     return () => {
@@ -42,7 +46,10 @@ export const AgentsSelector = ({
   }, [http, dataSourceMDSId]);
 
   const options = useMemo(
-    () => agents.map(({ id, name }) => ({ text: name, value: id, selected: id === value })),
+    () => [
+      { text: 'Select a agent', value: undefined, selected: value === undefined, disabled: true },
+      ...agents.map(({ id, name }) => ({ text: name, value: id, selected: id === value })),
+    ],
     [agents, value]
   );
 
@@ -50,7 +57,6 @@ export const AgentsSelector = ({
     <EuiSelect
       prepend="Agent"
       options={options}
-      placeholder="Select a agent"
       onChange={(e) => {
         onChange(e.target.value);
       }}

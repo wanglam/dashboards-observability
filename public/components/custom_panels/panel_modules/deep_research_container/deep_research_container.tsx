@@ -79,7 +79,7 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
   const [messageIdForTraceModal, setMessageIdForTraceModal] = useState<string>();
   const [guessExecutorMemoryId, setGuessExecutorMemoryId] = useState<string>();
 
-  const savedTask = useMemo(() => {
+  const paragraphResult = useMemo(() => {
     if (para.out[0]) {
       try {
         return JSON.parse(para.out[0]);
@@ -116,13 +116,15 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
   }, [task]);
 
   useEffect(() => {
-    if (!savedTask) {
+    if (!paragraphResult) {
       return;
     }
     const {
       task_id: taskId,
-      response: { memory_id: memoryId },
-    } = savedTask;
+      memory_id: directMemoryId,
+      response: { memory_id: responseMemoryId },
+    } = paragraphResult;
+    const memoryId = directMemoryId || responseMemoryId;
     let canceled = false;
     let messageId: string | undefined;
     const abortController = new AbortController();
@@ -196,7 +198,7 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
       abortController.abort();
       canceled = true;
     };
-  }, [savedTask, http, para.dataSourceMDSId]);
+  }, [paragraphResult, http, para.dataSourceMDSId]);
 
   const renderTraces = () => {
     return traces.map(({ input, response, message_id: messageId }, index) => (
@@ -245,13 +247,15 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
   const atLeastOneTraceGenerated = traces.length > 0;
 
   useEffect(() => {
-    if (!savedTask || !tracesVisible || !atLeastOneTraceGenerated) {
+    if (!paragraphResult || !tracesVisible || !atLeastOneTraceGenerated) {
       return;
     }
     let canceled = false;
     const {
-      response: { memory_id: memoryId },
-    } = savedTask;
+      memory_id: directMemoryId,
+      response: { memory_id: responseMemoryId },
+    } = paragraphResult;
+    const memoryId = directMemoryId || responseMemoryId;
     const abortController = new AbortController();
 
     getGuessExecutorMemoryId({
@@ -268,7 +272,7 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
       canceled = true;
       abortController.abort();
     };
-  }, [http, para.dataSourceMDSId, savedTask, tracesVisible, atLeastOneTraceGenerated]);
+  }, [http, para.dataSourceMDSId, paragraphResult, tracesVisible, atLeastOneTraceGenerated]);
 
   return (
     <div>
@@ -289,13 +293,13 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
       ) : (
         <EuiButton
           onClick={async () => {
-            if (!savedTask) {
+            if (!paragraphResult) {
               return;
             }
             if (traces.length === 0) {
               const memoryMessages = await getMLCommonsMemoryMessages({
                 http,
-                memoryId: savedTask.response.memory_id,
+                memoryId: paragraphResult.memory_id || paragraphResult.response?.memory_id,
                 dataSourceId: para.dataSourceMDSId,
               });
               const messageId = memoryMessages[0].message_id;
