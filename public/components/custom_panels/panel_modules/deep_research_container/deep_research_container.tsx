@@ -283,7 +283,7 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
             <h3>Final response</h3>
           </EuiTitle>
           <EuiText className="wrapAll markdown-output-text" size="s">
-            {finalMessage}
+            <MarkdownRender source={finalMessage} />
           </EuiText>
           <EuiSpacer />
         </>
