@@ -32,3 +32,32 @@ export const getAllTracesByMessageId = async (
   } while (!!nextToken);
   return traces;
 };
+export const isMarkdownText = (text: string) => {
+  // Common Markdown patterns to check for
+  const markdownPatterns = [
+    /^#{1,6}\s+.+$/m, // Headers
+    /(?<!\*)\*(?!\*)[^\*]+\*(?!\*)/, // Italic with single asterisk
+    /(?<!_)_(?!_)[^_]+_(?!_)/, // Italic with underscore
+    /\*\*[^\*]+\*\*/, // Bold with double asterisk
+    /__[^_]+__/, // Bold with double underscore
+    /^\s*[\*\-\+]\s+.+$/m, // Unordered lists
+    /^\s*\d+\.\s+.+$/m, // Ordered lists
+    /^\s*>\s+.+$/m, // Blockquotes
+    /`[^`]+`/, // Inline code
+    /```[\s\S]*?```/, // Code blocks
+    /\[.+?\]\(.+?\)/, // Links
+    /!\[.+?\]\(.+?\)/, // Images
+    /^\s*-{3,}\s*$/m, // Horizontal rules
+    /^\|.+\|$/m, // Tables
+  ];
+  let matchedTimes = 0;
+
+  // Check for any Markdown pattern
+  for (const pattern of markdownPatterns) {
+    if (pattern.test(text)) {
+      matchedTimes++;
+    }
+  }
+
+  return matchedTimes >= Math.min(markdownPatterns.length, 3);
+};

@@ -15,9 +15,35 @@ import {
   EuiText,
   EuiSpacer,
   EuiLoadingContent,
+  EuiCodeBlock,
 } from '@elastic/eui';
 import { CoreStart } from '../../../../../../../src/core/public';
-import { getAllTracesByMessageId } from './utils';
+import { getAllTracesByMessageId, isMarkdownText } from './utils';
+
+const renderTraceString = ({ text, fallback }: { text: string | undefined; fallback: string }) => {
+  if (!text) {
+    return fallback;
+  }
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = undefined;
+  }
+  if (json) {
+    return (
+      <EuiCodeBlock language="json" isCopyable>
+        {JSON.stringify(json, null, 2)}
+      </EuiCodeBlock>
+    );
+  }
+
+  return isMarkdownText(text) ? (
+    <MarkdownRender source={text} />
+  ) : (
+    <EuiCodeBlock>{text}</EuiCodeBlock>
+  );
+};
 
 export const MessageTraceModal = ({
   messageId,
@@ -58,7 +84,7 @@ export const MessageTraceModal = ({
           >
             <EuiText className="wrapAll markdown-output-text" size="s">
               {isFromLLM ? (
-                <MarkdownRender source={response} />
+                renderTraceString({ text: response, fallback: 'No response' })
               ) : (
                 <>
                   <EuiAccordion
@@ -66,13 +92,14 @@ export const MessageTraceModal = ({
                     buttonContent={`${origin} input`}
                     initialIsOpen
                   >
-                    {input}
+                    {renderTraceString({ text: input, fallback: 'No input' })}
                   </EuiAccordion>
                   <EuiAccordion
                     id={`trace-step-${index}-response`}
                     buttonContent={`${origin} response`}
+                    initialIsOpen={!response}
                   >
-                    {response}
+                    {renderTraceString({ text: response, fallback: 'No response' })}
                   </EuiAccordion>
                 </>
               )}
