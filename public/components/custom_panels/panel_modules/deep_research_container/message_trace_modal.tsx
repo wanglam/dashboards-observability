@@ -41,7 +41,7 @@ const renderTraceString = ({ text, fallback }: { text: string | undefined; fallb
   return isMarkdownText(text) ? (
     <MarkdownRender source={text} />
   ) : (
-    <EuiCodeBlock>{text}</EuiCodeBlock>
+    <EuiCodeBlock isCopyable>{text}</EuiCodeBlock>
   );
 };
 
