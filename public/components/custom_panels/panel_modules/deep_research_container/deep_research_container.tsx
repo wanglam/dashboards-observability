@@ -22,7 +22,7 @@ import {
   getMLCommonsMemory,
   getMLCommonsSingleMemory,
 } from './apis';
-import { getAllTracesByMessageId } from './utils';
+import { getAllTracesByMessageId, isMarkdownText } from './utils';
 import { MessageTraceModal } from './message_trace_modal';
 
 const getGuessExecutorMemoryId = async ({
@@ -283,7 +283,7 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
             <h3>Final response</h3>
           </EuiTitle>
           <EuiText className="wrapAll markdown-output-text" size="s">
-            <MarkdownRender source={finalMessage} />
+            {isMarkdownText(finalMessage) ? <MarkdownRender source={finalMessage} /> : finalMessage}
           </EuiText>
           <EuiSpacer />
         </>
