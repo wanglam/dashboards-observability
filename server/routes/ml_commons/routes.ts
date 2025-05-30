@@ -108,6 +108,7 @@ export function registerMLCommonsRoutes(router: IRouter) {
         query: schema.maybe(
           schema.object({
             data_source_id: schema.maybe(schema.string()),
+            next_token: schema.maybe(schema.string()),
           })
         ),
       },
@@ -124,11 +125,16 @@ export function registerMLCommonsRoutes(router: IRouter) {
             `{memoryId}`,
             request.params.memoryId
           ),
+          querystring: request.query?.next_token
+            ? {
+                next_token: request.query.next_token,
+              }
+            : {},
         });
-        return response.ok({ body: body.messages });
+        return response.ok({ body });
       } catch (e) {
         if (e.meta.body.status === 404) {
-          return response.ok({ body: [] });
+          return response.ok({ body: { messages: [] } });
         }
         return response.badRequest({ body: e.message });
       }
