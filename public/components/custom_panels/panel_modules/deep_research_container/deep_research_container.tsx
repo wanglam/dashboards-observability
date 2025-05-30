@@ -22,7 +22,7 @@ import {
   getMLCommonsMemory,
   getMLCommonsSingleMemory,
 } from './apis';
-import { getAllTracesByMessageId, isMarkdownText } from './utils';
+import { getAllMessagesByMemoryId, getAllTracesByMessageId, isMarkdownText } from './utils';
 import { MessageTraceModal } from './message_trace_modal';
 
 const getGuessExecutorMemoryId = async ({
@@ -169,12 +169,14 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
         return;
       }
       if (!messageId) {
-        const memoryMessages = await getMLCommonsMemoryMessages({
-          http,
-          memoryId,
-          signal: abortController.signal,
-          dataSourceId: para.dataSourceMDSId,
-        });
+        const memoryMessages = (
+          await getMLCommonsMemoryMessages({
+            http,
+            memoryId,
+            signal: abortController.signal,
+            dataSourceId: para.dataSourceMDSId,
+          })
+        ).messages;
         if (memoryMessages[0]) {
           messageId = memoryMessages[0].message_id;
           setTracesVisible(true);
@@ -220,7 +222,7 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
                 if (!messages || messages.length < traces.length) {
                   setIsLoadingExecutorMessages(true);
                   try {
-                    messages = await getMLCommonsMemoryMessages({
+                    messages = await getAllMessagesByMemoryId({
                       http,
                       memoryId: executorMemoryId || guessExecutorMemoryId,
                       dataSourceId: para.dataSourceMDSId,
@@ -297,11 +299,13 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
               return;
             }
             if (traces.length === 0) {
-              const memoryMessages = await getMLCommonsMemoryMessages({
-                http,
-                memoryId: paragraphResult.memory_id || paragraphResult.response?.memory_id,
-                dataSourceId: para.dataSourceMDSId,
-              });
+              const memoryMessages = (
+                await getMLCommonsMemoryMessages({
+                  http,
+                  memoryId: paragraphResult.memory_id || paragraphResult.response?.memory_id,
+                  dataSourceId: para.dataSourceMDSId,
+                })
+              ).messages;
               const messageId = memoryMessages[0].message_id;
               setTraces(
                 await getAllTracesByMessageId({

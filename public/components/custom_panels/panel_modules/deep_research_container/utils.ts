@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { getMLCommonsMessageTraces } from './apis';
+import { getMLCommonsMemoryMessages, getMLCommonsMessageTraces } from './apis';
 
 export interface Trace {
   input: string;
@@ -32,6 +32,30 @@ export const getAllTracesByMessageId = async (
   } while (!!nextToken);
   return traces;
 };
+
+export const getAllMessagesByMemoryId = async (
+  options: Omit<Parameters<typeof getMLCommonsMemoryMessages>[0], 'nextToken'>
+) => {
+  const messages = [];
+  let nextToken;
+  do {
+    try {
+      const result = await getMLCommonsMemoryMessages({
+        ...options,
+        nextToken,
+      });
+      result.messages.forEach((trace: Trace) => {
+        messages.push(trace);
+      });
+      nextToken = result.next_token;
+    } catch (e) {
+      console.error(e);
+      break;
+    }
+  } while (!!nextToken);
+  return messages;
+};
+
 export const isMarkdownText = (text: string) => {
   // Common Markdown patterns to check for
   const markdownPatterns = [

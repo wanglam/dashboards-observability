@@ -72,16 +72,19 @@ export const getMLCommonsMemoryMessages = async ({
   memoryId,
   signal,
   dataSourceId,
+  nextToken,
 }: {
   http: CoreStart['http'];
   memoryId: string;
   signal?: AbortSignal;
   dataSourceId?: string;
+  nextToken?: string;
 }) =>
   http.get(OBSERVABILITY_ML_COMMONS_API.memoryMessages.replace('{memoryId}', memoryId), {
     signal,
     query: {
       data_source_id: dataSourceId,
+      next_token: nextToken,
     },
   });
 
