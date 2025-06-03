@@ -74,10 +74,9 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
   const [task, setTask] = useState();
   const [isLoading, setIsLoading] = useState(false);
   const [tracesVisible, setTracesVisible] = useState(false);
-  const [executorMessages, setExecutorMessages] = useState();
-  const [loadingExecutorMessages, setIsLoadingExecutorMessages] = useState(false);
+  const [executorMessages, setExecutorMessages] = useState([]);
+  const [loadingSteps, setLoadingSteps] = useState(false);
   const [messageIdForTraceModal, setMessageIdForTraceModal] = useState<string>();
-  const [guessExecutorMemoryId, setGuessExecutorMemoryId] = useState<string>();
 
   const paragraphResult = useMemo(() => {
     if (para.out[0]) {
@@ -203,78 +202,38 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
   }, [paragraphResult, http, para.dataSourceMDSId]);
 
   const renderTraces = () => {
-    return traces.map(({ input, response, message_id: messageId }, index) => (
-      <React.Fragment key={messageId}>
-        <EuiAccordion
-          id={`trace-${index}`}
-          buttonContent={`Step ${index + 1} - ${input}`}
-          paddingSize="l"
-        >
-          <EuiText className="wrapAll markdown-output-text" size="s">
-            <MarkdownRender source={response} />
-          </EuiText>
-          {(guessExecutorMemoryId || executorMemoryId) && (
-            <EuiButton
-              isLoading={loadingExecutorMessages}
-              disabled={loadingExecutorMessages}
-              onClick={async () => {
-                let messages = executorMessages;
-                if (!messages || messages.length < traces.length) {
-                  setIsLoadingExecutorMessages(true);
-                  try {
-                    messages = await getAllMessagesByMemoryId({
-                      http,
-                      memoryId: executorMemoryId || guessExecutorMemoryId,
-                      dataSourceId: para.dataSourceMDSId,
-                    });
-                    setExecutorMessages(messages);
-                  } finally {
-                    setIsLoadingExecutorMessages(false);
-                  }
-                }
-                if (messages && messages[index]?.message_id) {
-                  setMessageIdForTraceModal(messages[index].message_id);
-                }
-              }}
-            >
-              Explain this step
-            </EuiButton>
-          )}
-        </EuiAccordion>
-        <EuiSpacer />
-      </React.Fragment>
-    ));
+    return (
+      <>
+        {[...traces, ...executorMessages.slice(traces.length)].map(
+          ({ input, response, message_id: messageId }, index) => (
+            <React.Fragment key={messageId}>
+              <EuiAccordion
+                id={`trace-${index}`}
+                buttonContent={`Step ${index + 1}${!response ? '(No response)' : ''} - ${input}`}
+                paddingSize="l"
+              >
+                {response && (
+                  <EuiText className="wrapAll markdown-output-text" size="s">
+                    <MarkdownRender source={response} />
+                  </EuiText>
+                )}
+                {executorMessages?.[index] && (
+                  <EuiButton
+                    onClick={() => {
+                      setMessageIdForTraceModal(executorMessages[index].message_id);
+                    }}
+                  >
+                    Explain this step
+                  </EuiButton>
+                )}
+              </EuiAccordion>
+              <EuiSpacer />
+            </React.Fragment>
+          )
+        )}
+      </>
+    );
   };
-
-  const atLeastOneTraceGenerated = traces.length > 0;
-
-  useEffect(() => {
-    if (!paragraphResult || !tracesVisible || !atLeastOneTraceGenerated) {
-      return;
-    }
-    let canceled = false;
-    const {
-      memory_id: directMemoryId,
-      response: { memory_id: responseMemoryId },
-    } = paragraphResult;
-    const memoryId = directMemoryId || responseMemoryId;
-    const abortController = new AbortController();
-
-    getGuessExecutorMemoryId({
-      http,
-      dataSourceId: para.dataSourceMDSId,
-      memoryId,
-      signal: abortController.signal,
-    }).then((id) => {
-      if (!canceled) {
-        setGuessExecutorMemoryId(id);
-      }
-    });
-    return () => {
-      canceled = true;
-      abortController.abort();
-    };
-  }, [http, para.dataSourceMDSId, paragraphResult, tracesVisible, atLeastOneTraceGenerated]);
 
   return (
     <div>
@@ -294,28 +253,56 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
         <EuiLoadingContent />
       ) : (
         <EuiButton
+          isLoading={loadingSteps}
           onClick={async () => {
             if (!paragraphResult) {
               return;
             }
-            if (traces.length === 0) {
-              const memoryMessages = (
-                await getMLCommonsMemoryMessages({
-                  http,
-                  memoryId: paragraphResult.memory_id || paragraphResult.response?.memory_id,
-                  dataSourceId: para.dataSourceMDSId,
-                })
-              ).messages;
-              const messageId = memoryMessages[0].message_id;
-              setTraces(
-                await getAllTracesByMessageId({
-                  http,
-                  messageId,
-                  dataSourceId: para.dataSourceMDSId,
-                })
-              );
+            if (traces.length === 0 || executorMessages.length === 0) {
+              setLoadingSteps(true);
             }
+            const planMemoryId = paragraphResult.memory_id || paragraphResult.response?.memory_id;
+            try {
+              if (traces.length === 0) {
+                const memoryMessages = (
+                  await getMLCommonsMemoryMessages({
+                    http,
+                    memoryId: planMemoryId,
+                    dataSourceId: para.dataSourceMDSId,
+                  })
+                ).messages;
+                const messageId = memoryMessages[0].message_id;
+                setTraces(
+                  await getAllTracesByMessageId({
+                    http,
+                    messageId,
+                    dataSourceId: para.dataSourceMDSId,
+                  })
+                );
+              }
+              if (executorMessages.length === 0) {
+                let requestMemoryId = executorMemoryId;
+                if (!requestMemoryId) {
+                  requestMemoryId = await getGuessExecutorMemoryId({
+                    http,
+                    memoryId: planMemoryId,
+                    dataSourceId: para.dataSourceMDSId,
+                  });
+                }
 
+                if (requestMemoryId) {
+                  setExecutorMessages(
+                    await getAllMessagesByMemoryId({
+                      http,
+                      memoryId: requestMemoryId,
+                      dataSourceId: para.dataSourceMDSId,
+                    })
+                  );
+                }
+              }
+            } finally {
+              setLoadingSteps(false);
+            }
             setTracesVisible((flag) => !flag);
           }}
         >
