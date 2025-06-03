@@ -126,6 +126,7 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
     const memoryId = directMemoryId || responseMemoryId;
     let canceled = false;
     let messageId: string | undefined;
+    let guessExecutorMemoryId: string | undefined;
     const abortController = new AbortController();
 
     const loadTraces = async () => {
@@ -183,6 +184,26 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
       }
 
       await loadTraces();
+      if (!guessExecutorMemoryId) {
+        guessExecutorMemoryId = await getGuessExecutorMemoryId({
+          http,
+          memoryId,
+          dataSourceId: para.dataSourceMDSId,
+        });
+      }
+
+      if (guessExecutorMemoryId) {
+        setExecutorMessages(
+          (
+            await getMLCommonsMemoryMessages({
+              http,
+              memoryId: guessExecutorMemoryId,
+              signal: abortController.signal,
+              dataSourceId: para.dataSourceMDSId,
+            })
+          ).messages
+        );
+      }
 
       await new Promise((resolve) => {
         setTimeout(resolve, 5000);
