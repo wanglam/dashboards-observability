@@ -25,6 +25,7 @@ import {
 import { getAllMessagesByMemoryId, getAllTracesByMessageId, isMarkdownText } from './utils';
 import { MessageTraceModal } from './message_trace_modal';
 
+// TODO: Remove this in production
 const getGuessExecutorMemoryId = async ({
   http,
   dataSourceId,
@@ -63,6 +64,36 @@ const getGuessExecutorMemoryId = async ({
   });
   return result?.hits?.hits[0]?._id;
 };
+
+const getAllExecutorMessages = ({
+  http,
+  signal,
+  dataSourceId,
+  planMemoryId,
+  executorMemoryId,
+}: {
+  planMemoryId: string;
+  executorMemoryId?: string;
+  http: CoreStart['http'];
+  signal?: AbortSignal;
+  dataSourceId?: string;
+}) =>
+  (executorMemoryId
+    ? Promise.resolve(executorMemoryId)
+    : getGuessExecutorMemoryId({
+        http,
+        memoryId: planMemoryId,
+        dataSourceId,
+        signal,
+      })
+  ).then((requestMemoryId) =>
+    getAllMessagesByMemoryId({
+      http,
+      memoryId: requestMemoryId,
+      dataSourceId,
+      signal,
+    })
+  );
 
 interface Props {
   http: CoreStart['http'];
@@ -107,6 +138,9 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
   }, [task]);
 
   const executorMemoryId = useMemo(() => {
+    if (task?.response?.executor_agent_memory_id) {
+      return task.response.executor_agent_memory_id;
+    }
     const inferenceResult = task?.response?.inference_results?.[0];
     if (!inferenceResult) {
       return;
@@ -126,7 +160,6 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
     const memoryId = directMemoryId || responseMemoryId;
     let canceled = false;
     let messageId: string | undefined;
-    let guessExecutorMemoryId: string | undefined;
     const abortController = new AbortController();
 
     const loadTraces = async () => {
@@ -154,16 +187,11 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
       if (canceled) {
         return;
       }
-      if (loadedTask.state === 'COMPLETED') {
-        setTask(loadedTask);
-        await loadTraces();
-        setIsLoading(false);
-        setTracesVisible(false);
-        return;
-      }
-      if (loadedTask.state === 'FAILED') {
-        setTask(loadedTask);
-        await loadTraces();
+
+      setTask((prevTask) => (prevTask?.state !== loadedTask.state ? loadedTask : prevTask));
+      if (loadedTask.state === 'COMPLETED' || loadedTask.state === 'FAILED') {
+        setTraces([]);
+        setExecutorMessages([]);
         setIsLoading(false);
         setTracesVisible(false);
         return;
@@ -183,27 +211,18 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
         }
       }
 
-      await loadTraces();
-      if (!guessExecutorMemoryId) {
-        guessExecutorMemoryId = await getGuessExecutorMemoryId({
+      await Promise.allSettled([
+        loadTraces(),
+        getAllExecutorMessages({
           http,
-          memoryId,
           dataSourceId: para.dataSourceMDSId,
-        });
-      }
-
-      if (guessExecutorMemoryId) {
-        setExecutorMessages(
-          (
-            await getMLCommonsMemoryMessages({
-              http,
-              memoryId: guessExecutorMemoryId,
-              signal: abortController.signal,
-              dataSourceId: para.dataSourceMDSId,
-            })
-          ).messages
-        );
-      }
+          planMemoryId: directMemoryId,
+          executorMemoryId: loadedTask?.response?.executor_agent_memory_id,
+        }).then((payload) => {
+          setExecutorMessages(payload);
+          return payload;
+        }),
+      ]);
 
       await new Promise((resolve) => {
         setTimeout(resolve, 5000);
@@ -279,48 +298,36 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
             if (!paragraphResult) {
               return;
             }
-            if (traces.length === 0 || executorMessages.length === 0) {
-              setLoadingSteps(true);
+            if (traces.length > 0) {
+              return;
             }
+            setLoadingSteps(true);
             const planMemoryId = paragraphResult.memory_id || paragraphResult.response?.memory_id;
             try {
-              if (traces.length === 0) {
-                const memoryMessages = (
-                  await getMLCommonsMemoryMessages({
-                    http,
-                    memoryId: planMemoryId,
-                    dataSourceId: para.dataSourceMDSId,
-                  })
-                ).messages;
-                const messageId = memoryMessages[0].message_id;
-                setTraces(
-                  await getAllTracesByMessageId({
-                    http,
-                    messageId,
-                    dataSourceId: para.dataSourceMDSId,
-                  })
-                );
-              }
-              if (executorMessages.length === 0) {
-                let requestMemoryId = executorMemoryId;
-                if (!requestMemoryId) {
-                  requestMemoryId = await getGuessExecutorMemoryId({
-                    http,
-                    memoryId: planMemoryId,
-                    dataSourceId: para.dataSourceMDSId,
-                  });
-                }
-
-                if (requestMemoryId) {
-                  setExecutorMessages(
-                    await getAllMessagesByMemoryId({
-                      http,
-                      memoryId: requestMemoryId,
-                      dataSourceId: para.dataSourceMDSId,
-                    })
-                  );
-                }
-              }
+              const memoryMessages = (
+                await getMLCommonsMemoryMessages({
+                  http,
+                  memoryId: planMemoryId,
+                  dataSourceId: para.dataSourceMDSId,
+                })
+              ).messages;
+              const messageId = memoryMessages[0].message_id;
+              await Promise.allSettled([
+                getAllTracesByMessageId({
+                  http,
+                  messageId,
+                  dataSourceId: para.dataSourceMDSId,
+                }),
+                getAllExecutorMessages({
+                  http,
+                  dataSourceId: para.dataSourceMDSId,
+                  planMemoryId,
+                  executorMemoryId,
+                }),
+              ]).then(([{ value: loadedTraces }, { value: loadedExecutorMessages }]) => {
+                setTraces(loadedTraces);
+                setExecutorMessages(loadedExecutorMessages);
+              });
             } finally {
               setLoadingSteps(false);
             }

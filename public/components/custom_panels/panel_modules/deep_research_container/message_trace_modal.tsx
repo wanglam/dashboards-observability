@@ -57,22 +57,35 @@ export const MessageTraceModal = ({
   dataSourceId?: string;
 }) => {
   const [traces, setTraces] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
   useEffect(() => {
     const abortController = new AbortController();
+    setIsLoading(true);
     getAllTracesByMessageId({
       http,
       messageId,
       signal: abortController.signal,
       dataSourceId,
-    }).then((messageTraces) => {
-      setTraces(messageTraces);
-    });
+    })
+      .then((messageTraces) => {
+        setTraces(messageTraces);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
     return () => {
       abortController.abort();
     };
   }, [messageId, http, dataSourceId]);
 
   const renderTraces = () => {
+    if (traces.length === 0) {
+      return (
+        <EuiText className="wrapAll markdown-output-text" size="s">
+          No traces data.
+        </EuiText>
+      );
+    }
     return traces.map(({ input, response, message_id: traceMessageId, origin }, index) => {
       const isFromLLM = origin?.toLowerCase() === 'llm';
       return (
@@ -119,7 +132,7 @@ export const MessageTraceModal = ({
         </EuiModalHeaderTitle>
       </EuiModalHeader>
 
-      <EuiModalBody>{traces.length > 0 ? renderTraces() : <EuiLoadingContent />}</EuiModalBody>
+      <EuiModalBody>{isLoading ? renderTraces() : <EuiLoadingContent />}</EuiModalBody>
 
       <EuiModalFooter>
         <EuiButton onClick={closeModal} fill>
