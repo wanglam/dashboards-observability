@@ -216,7 +216,7 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
         getAllExecutorMessages({
           http,
           dataSourceId: para.dataSourceMDSId,
-          planMemoryId: directMemoryId,
+          planMemoryId: memoryId,
           executorMemoryId: loadedTask?.response?.executor_agent_memory_id,
         }).then((payload) => {
           setExecutorMessages(payload);
