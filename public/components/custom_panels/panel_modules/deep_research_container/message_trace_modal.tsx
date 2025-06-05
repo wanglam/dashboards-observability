@@ -132,7 +132,7 @@ export const MessageTraceModal = ({
         </EuiModalHeaderTitle>
       </EuiModalHeader>
 
-      <EuiModalBody>{isLoading ? renderTraces() : <EuiLoadingContent />}</EuiModalBody>
+      <EuiModalBody>{isLoading ? <EuiLoadingContent /> : renderTraces()}</EuiModalBody>
 
       <EuiModalFooter>
         <EuiButton onClick={closeModal} fill>
