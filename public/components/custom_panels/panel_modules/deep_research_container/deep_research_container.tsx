@@ -2,16 +2,9 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import MarkdownRender from '@nteract/markdown';
-import {
-  EuiButton,
-  EuiLoadingContent,
-  EuiText,
-  EuiAccordion,
-  EuiSpacer,
-  EuiTitle,
-} from '@elastic/eui';
+import { EuiButton, EuiLoadingContent, EuiText, EuiAccordion, EuiSpacer } from '@elastic/eui';
 
 import { CoreStart } from '../../../../../../../src/core/public';
 import { ParaType } from '../../../../../common/types/notebooks';
@@ -108,6 +101,7 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
   const [executorMessages, setExecutorMessages] = useState([]);
   const [loadingSteps, setLoadingSteps] = useState(false);
   const [messageIdForTraceModal, setMessageIdForTraceModal] = useState<string>();
+  const initialFinalResponseVisible = useRef(false);
 
   const paragraphResult = useMemo(() => {
     if (para.out[0]) {
@@ -187,9 +181,16 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
       if (canceled) {
         return;
       }
+      const taskCompletedOrFailed =
+        loadedTask.state === 'COMPLETED' || loadedTask.state === 'FAILED';
+
+      // Message id exist means task at least pull once, should show final response for this case.
+      if (taskCompletedOrFailed && messageId) {
+        initialFinalResponseVisible.current = true;
+      }
 
       setTask((prevTask) => (prevTask?.state !== loadedTask.state ? loadedTask : prevTask));
-      if (loadedTask.state === 'COMPLETED' || loadedTask.state === 'FAILED') {
+      if (taskCompletedOrFailed) {
         setTraces([]);
         setExecutorMessages([]);
         setIsLoading(false);
@@ -280,12 +281,19 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
       {tracesVisible && renderTraces()}
       {finalMessage && (
         <>
-          <EuiTitle>
-            <h3>Final response</h3>
-          </EuiTitle>
-          <EuiText className="wrapAll markdown-output-text" size="s">
-            {isMarkdownText(finalMessage) ? <MarkdownRender source={finalMessage} /> : finalMessage}
-          </EuiText>
+          <EuiAccordion
+            id="final-response"
+            buttonContent={<h3>Final response</h3>}
+            initialIsOpen={initialFinalResponseVisible.current}
+          >
+            <EuiText className="wrapAll markdown-output-text" size="s">
+              {isMarkdownText(finalMessage) ? (
+                <MarkdownRender source={finalMessage} />
+              ) : (
+                finalMessage
+              )}
+            </EuiText>
+          </EuiAccordion>
           <EuiSpacer />
         </>
       )}
