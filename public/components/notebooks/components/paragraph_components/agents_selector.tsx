@@ -65,7 +65,10 @@ export const AgentsSelector = ({
         const agentResults = hits.hits.map(({ _id, _source: { name } }) => ({ id: _id, name }));
         setAgents(agentResults);
         if (!valueRef.current) {
-          onChange(agentResults[0]?.id);
+          const recommendAgent = agentResults.find(
+            ({ name }) => name.includes('3.7') && name.includes('ppl')
+          );
+          onChange(recommendAgent?.id ?? agentResults[0]?.id);
         }
       }
     });
