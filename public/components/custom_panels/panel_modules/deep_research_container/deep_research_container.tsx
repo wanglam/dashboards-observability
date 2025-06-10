@@ -307,6 +307,7 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
               return;
             }
             if (traces.length > 0) {
+              setTracesVisible((flag) => !flag);
               return;
             }
             setLoadingSteps(true);
