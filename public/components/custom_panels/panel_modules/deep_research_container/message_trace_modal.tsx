@@ -50,36 +50,55 @@ export const MessageTraceModal = ({
   closeModal,
   http,
   dataSourceId,
+  refresh,
 }: {
   messageId: string;
   closeModal: () => void;
   http: CoreStart['http'];
   dataSourceId?: string;
+  refresh: boolean;
 }) => {
   const [traces, setTraces] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   useEffect(() => {
     const abortController = new AbortController();
-    setIsLoading(true);
-    getAllTracesByMessageId({
-      http,
-      messageId,
-      signal: abortController.signal,
-      dataSourceId,
-    })
-      .then((messageTraces) => {
-        setTraces(messageTraces);
-      })
-      .finally(() => {
-        setIsLoading(false);
+    let canceled = false;
+    const fetchAllTraces = async () => {
+      try {
+        if (!canceled) {
+          setIsLoading(true);
+        }
+        const messageTraces = await getAllTracesByMessageId({
+          http,
+          messageId,
+          signal: abortController.signal,
+          dataSourceId,
+        });
+
+        if (!canceled) {
+          setTraces(messageTraces);
+        }
+      } finally {
+        if (!refresh) {
+          setIsLoading(false);
+        }
+      }
+      await new Promise((resolve) => {
+        setTimeout(resolve, 5000);
       });
+      if (!canceled && refresh) {
+        fetchAllTraces();
+      }
+    };
+    fetchAllTraces();
     return () => {
       abortController.abort();
+      canceled = true;
     };
-  }, [messageId, http, dataSourceId]);
+  }, [messageId, refresh, http, dataSourceId]);
 
   const renderTraces = () => {
-    if (traces.length === 0) {
+    if (!isLoading && traces.length === 0) {
       return (
         <EuiText className="wrapAll markdown-output-text" size="s">
           No traces data.
@@ -132,7 +151,10 @@ export const MessageTraceModal = ({
         </EuiModalHeaderTitle>
       </EuiModalHeader>
 
-      <EuiModalBody>{isLoading ? <EuiLoadingContent /> : renderTraces()}</EuiModalBody>
+      <EuiModalBody>
+        {renderTraces()}
+        {isLoading && <EuiLoadingContent />}
+      </EuiModalBody>
 
       <EuiModalFooter>
         <EuiButton onClick={closeModal} fill>

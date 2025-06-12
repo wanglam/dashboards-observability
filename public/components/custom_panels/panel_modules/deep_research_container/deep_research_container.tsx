@@ -100,7 +100,10 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
   const [tracesVisible, setTracesVisible] = useState(false);
   const [executorMessages, setExecutorMessages] = useState([]);
   const [loadingSteps, setLoadingSteps] = useState(false);
-  const [messageIdForTraceModal, setMessageIdForTraceModal] = useState<string>();
+  const [traceModalData, setTraceModalData] = useState<{
+    messageId: string;
+    refresh: boolean;
+  }>();
   const initialFinalResponseVisible = useRef(false);
 
   const paragraphResult = useMemo(() => {
@@ -261,7 +264,10 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
                 {executorMessages?.[index] && (
                   <EuiButton
                     onClick={() => {
-                      setMessageIdForTraceModal(executorMessages[index].message_id);
+                      setTraceModalData({
+                        messageId: executorMessages[index].message_id,
+                        refresh: !response,
+                      });
                     }}
                   >
                     Explain this step
@@ -274,6 +280,19 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
         )}
       </>
     );
+  };
+
+  const shouldTracesModalRefresh = () => {
+    if (!traceModalData || !traceModalData.refresh) {
+      return false;
+    }
+    if (task.state === 'COMPLETED' || task.state === 'FAILED') {
+      return false;
+    }
+    const traceMessage = executorMessages.find(
+      ({ message_id: messageId }) => messageId === traceModalData.messageId
+    );
+    return !traceMessage?.response;
   };
 
   return (
@@ -346,12 +365,13 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
           {tracesVisible ? 'Hide traces' : 'Show traces'}
         </EuiButton>
       )}
-      {messageIdForTraceModal && (
+      {traceModalData && (
         <MessageTraceModal
-          messageId={messageIdForTraceModal}
+          messageId={traceModalData.messageId}
+          refresh={shouldTracesModalRefresh()}
           http={http}
           closeModal={() => {
-            setMessageIdForTraceModal(undefined);
+            setTraceModalData(undefined);
           }}
           dataSourceId={para.dataSourceMDSId}
         />
