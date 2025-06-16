@@ -82,6 +82,7 @@ export function registerMLCommonsRoutes(router: IRouter) {
                     type: types,
                   },
                 },
+                size: 10000,
               }
             : {},
         });
