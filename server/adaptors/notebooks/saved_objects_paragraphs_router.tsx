@@ -13,6 +13,7 @@ import {
 } from '../../common/helpers/notebooks/default_notebook_schema';
 import { formatNotRecognized, inputIsQuery } from '../../common/helpers/notebooks/query_helpers';
 import { OpenSearchClient } from '../../../../../src/core/server';
+import { constructDeepResearchParagraphOut } from '../../../common/utils/paragraph';
 
 export function createNotebook(paragraphInput: string, inputType: string) {
   try {
@@ -146,11 +147,14 @@ export async function updateRunFetchParagraph(
     paragraphType: string;
     dataSourceMDSId: string | undefined;
     dataSourceMDSLabel: string | undefined;
+    deepResearchAgentId?: string | undefined;
+    deepResearchContext?: string | undefined;
+    deepResearchBaseMemoryId?: string | undefined;
   },
   opensearchNotebooksClient: SavedObjectsClientContract,
-  transport: OpenSearchClient['transport'],
-  deepResearchAgentId: string | undefined
+  transport: OpenSearchClient['transport']
 ) {
+  let deepResearchAgentId = params.deepResearchAgentId;
   if (!deepResearchAgentId) {
     try {
       const { body } = await transport.request({
@@ -176,7 +180,9 @@ export async function updateRunFetchParagraph(
       updatedInputParagraphs,
       params.paragraphId,
       transport,
-      deepResearchAgentId
+      deepResearchAgentId,
+      params.deepResearchContext,
+      params.deepResearchBaseMemoryId
     );
 
     const updateNotebook = {
@@ -204,7 +210,9 @@ export async function runParagraph(
   paragraphs: DefaultParagraph[],
   paragraphId: string,
   transport: OpenSearchClient['transport'],
-  deepResearchAgentId: string | undefined
+  deepResearchAgentId: string | undefined,
+  deepResearchContext: string | undefined,
+  deepResearchBaseMemoryId: string | undefined
 ) {
   try {
     const updatedParagraphs = [];
@@ -265,21 +273,26 @@ export async function runParagraph(
             querystring: 'async=true',
             body: {
               parameters: {
-                question: paragraphs[index].input.inputText,
+                question: `${paragraphs[index].input.inputText}${
+                  deepResearchContext ? `, Context: ${deepResearchContext}` : ''
+                }`,
+                memory_id: deepResearchBaseMemoryId,
               },
             },
           });
-          const memoryId = body.response?.memory_id;
           updatedParagraph.output = [
             {
               outputType: 'DEEP_RESEARCH',
-              result: JSON.stringify({
-                task_id: body.task_id,
-                memory_id: memoryId,
-                agent_id: deepResearchAgentId,
-                // TODO: Remove this on production
-                response: { memory_id: body.response?.memory_id },
-              }),
+              result: JSON.stringify(
+                constructDeepResearchParagraphOut({
+                  taskId: body.task_id,
+                  memoryId: body.response?.memory_id,
+                  parentInteractionId: body.response?.parent_interaction_id,
+                  agentId: deepResearchAgentId,
+                  state: body.status,
+                  baseMemoryId: deepResearchBaseMemoryId,
+                })
+              ),
               execution_time: `${(now() - startTime).toFixed(3)} ms`,
             },
           ];
@@ -304,22 +317,28 @@ export async function runParagraph(
 export function updateParagraphs(
   paragraphs: DefaultParagraph[],
   paragraphId: string,
-  paragraphInput: string,
+  paragraphInput?: string,
   paragraphType?: string,
   dataSourceMDSId?: string,
-  dataSourceMDSLabel?: string
+  dataSourceMDSLabel?: string,
+  paragraphOutput?: DefaultOutput[]
 ) {
   try {
     const updatedParagraphs: DefaultParagraph[] = [];
     paragraphs.map((paragraph: DefaultParagraph) => {
       const updatedParagraph = { ...paragraph };
       if (paragraph.id === paragraphId) {
-        updatedParagraph.dataSourceMDSId = dataSourceMDSId;
-        updatedParagraph.dataSourceMDSLabel = dataSourceMDSLabel;
+        updatedParagraph.dataSourceMDSId = dataSourceMDSId ?? paragraph.dataSourceMDSId;
+        updatedParagraph.dataSourceMDSLabel = dataSourceMDSLabel ?? paragraph.dataSourceMDSId;
         updatedParagraph.dateModified = new Date().toISOString();
-        updatedParagraph.input.inputText = paragraphInput;
-        if (paragraphType.length > 0) {
+        if (paragraphInput) {
+          updatedParagraph.input.inputText = paragraphInput;
+        }
+        if (paragraphType && paragraphType.length > 0) {
           updatedParagraph.input.inputType = paragraphType;
+        }
+        if (paragraphOutput) {
+          updatedParagraph.output = paragraphOutput;
         }
       }
       updatedParagraphs.push(updatedParagraph);
@@ -331,7 +350,12 @@ export function updateParagraphs(
 }
 
 export async function updateFetchParagraph(
-  params: { noteId: string; paragraphId: string; paragraphInput: string },
+  params: {
+    noteId: string;
+    paragraphId: string;
+    paragraphInput: string;
+    paragraphOutput?: DefaultOutput[];
+  },
   opensearchNotebooksClient: SavedObjectsClientContract
 ) {
   try {
@@ -339,7 +363,11 @@ export async function updateFetchParagraph(
     const updatedInputParagraphs = updateParagraphs(
       notebookinfo.attributes.savedNotebook.paragraphs,
       params.paragraphId,
-      params.paragraphInput
+      params.paragraphInput,
+      undefined,
+      undefined,
+      undefined,
+      params.paragraphOutput
     );
 
     const updateNotebook = {

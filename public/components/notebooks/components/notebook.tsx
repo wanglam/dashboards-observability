@@ -31,6 +31,9 @@ import moment from 'moment';
 import queryString from 'query-string';
 import React, { Component } from 'react';
 import { RouteComponentProps } from 'react-router-dom';
+import { Subscription, timer } from 'rxjs';
+import { switchMap, takeWhile } from 'rxjs/operators';
+
 import {
   ChromeBreadcrumb,
   CoreStart,
@@ -56,6 +59,10 @@ import {
   generateInContextReport,
 } from './helpers/reporting_context_menu_helper';
 import { Paragraphs } from './paragraph_components/paragraphs';
+import { getMLCommonsTask } from '../../../utils/ml_commons_apis';
+import { parseParagraphOut } from '../../../utils/paragraph';
+import { isStateCompletedOrFailed } from '../../../utils/task';
+import { constructDeepResearchParagraphOut } from '../../../../common/utils/paragraph';
 
 const ParagraphTypeDeepResearch = 'DEEP_RESEARCH';
 
@@ -118,6 +125,8 @@ interface NotebookState {
   dataSourceMDSEnabled: boolean;
 }
 export class Notebook extends Component<NotebookProps, NotebookState> {
+  private _taskSubscriptions = new Map<string, Subscription>();
+
   constructor(props: Readonly<NotebookProps>) {
     super(props);
     this.state = {
@@ -517,6 +526,97 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
       });
   };
 
+  private _registerDeepResearchParagraphUpdater = ({
+    taskId,
+    paraUniqueId,
+    agentId,
+    baseMemoryId,
+  }: {
+    taskId: string;
+    paraUniqueId: string;
+    agentId: string;
+    baseMemoryId?: string | undefined;
+  }) => {
+    const cleanTaskSubscription = () => {
+      this._taskSubscriptions.get(taskId)?.unsubscribe();
+      this._taskSubscriptions.delete(taskId);
+    };
+    this._taskSubscriptions.set(
+      taskId,
+      timer(0, 5000)
+        .pipe(
+          switchMap(() => {
+            const parsePara = this.state.parsedPara.find((para) => para.uniqueId === paraUniqueId);
+            if (!parsePara) {
+              return 'STOP';
+            }
+            return getMLCommonsTask({
+              http: this.props.http,
+              taskId,
+              dataSourceId: parsePara.dataSourceMDSId,
+            });
+          })
+        )
+        .pipe(takeWhile((res) => res !== 'STOP' && !isStateCompletedOrFailed(res.state), true))
+        .subscribe({
+          next: (payload) => {
+            if (payload === 'STOP') {
+              cleanTaskSubscription();
+              return;
+            }
+            const currentParsedParaIndex = this.state.parsedPara.findIndex(
+              (para) => para.uniqueId === paraUniqueId
+            );
+            const result = JSON.stringify(
+              constructDeepResearchParagraphOut({
+                task: payload,
+                taskId,
+                agentId,
+                baseMemoryId,
+              })
+            );
+            if (
+              !isStateCompletedOrFailed(payload.state) &&
+              result === this.state.parsedPara[currentParsedParaIndex]?.out[0]
+            ) {
+              return;
+            }
+            if (isStateCompletedOrFailed(payload.state)) {
+              cleanTaskSubscription();
+            }
+            const out = [result];
+            this.setState({
+              parsedPara: [
+                ...this.state.parsedPara.slice(0, currentParsedParaIndex),
+                {
+                  ...this.state.parsedPara[currentParsedParaIndex],
+                  out,
+                  isRunning: false,
+                },
+                ...this.state.parsedPara.slice(currentParsedParaIndex + 1),
+              ],
+            });
+            this.props.http.put(`${NOTEBOOKS_API_PREFIX}/savedNotebook/paragraph`, {
+              body: JSON.stringify({
+                noteId: this.props.openedNoteId,
+                paragraphId: paraUniqueId,
+                paragraphOutput: [
+                  {
+                    outputType: 'DEEP_RESEARCH',
+                    result,
+                  },
+                ],
+              }),
+            });
+          },
+          error: (...args) => {
+            console.log('Failed to fetch task status', ...args);
+            cleanTaskSubscription();
+          },
+        })
+    );
+  };
+
   // Backend call to update and run contents of paragraph
   updateRunParagraph = (
     para: ParaType,
@@ -524,7 +624,8 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
     vizObjectInput?: string,
     paraType?: string,
     _dataSourceMDSId?: string,
-    deepResearchAgentId?: string
+    deepResearchAgentId?: string,
+    deepResearchBaseMemoryId?: string
   ) => {
     this.showParagraphRunning(index);
     if (vizObjectInput) {
@@ -539,6 +640,7 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
       dataSourceMDSId: this.state.dataSourceMDSId || '',
       dataSourceMDSLabel: this.state.dataSourceMDSLabel || '',
       deepResearchAgentId,
+      deepResearchBaseMemoryId,
     };
     const isValid = isValidUUID(this.props.openedNoteId);
     const route = isValid
@@ -556,13 +658,32 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
             return;
           }
         }
+        const legacyParsedParagraphData = this.state.parsedPara[index];
         const paragraphs = this.state.paragraphs;
         paragraphs[index] = res;
         const parsedPara = [...this.state.parsedPara];
         parsedPara[index] = this.parseParagraphs([res])[0];
+
+        if (res.output[0]?.outputType === 'DEEP_RESEARCH') {
+          parsedPara[index].isRunning = true;
+          const legacyParsedParagraphOut = parseParagraphOut(legacyParsedParagraphData)[0];
+          const legacyTaskId = legacyParsedParagraphOut?.task_id;
+          if (legacyTaskId) {
+            this._taskSubscriptions.get(legacyTaskId)?.unsubscribe();
+            this._taskSubscriptions.delete(legacyTaskId);
+          }
+          const taskId = parseParagraphOut(parsedPara[index])[0]?.task_id;
+          this._registerDeepResearchParagraphUpdater({
+            taskId,
+            paraUniqueId: para.uniqueId,
+            agentId: deepResearchAgentId ?? '',
+            baseMemoryId: deepResearchBaseMemoryId,
+          });
+        }
         this.setState({ paragraphs, parsedPara });
       })
       .catch((err) => {
+        console.log(err);
         if (err.body.statusCode === 413)
           this.props.setToast(`Error running paragraph: ${err.body.message}`, 'danger');
         else
@@ -673,6 +794,29 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
             await this.loadQueryResultsFromInput(res.paragraphs[index]);
           } else if (res.paragraphs[index].output[0]?.outputType === 'QUERY') {
             await this.loadQueryResultsFromInput(res.paragraphs[index], '');
+          } else if (res.paragraphs[index].output[0]?.outputType === 'DEEP_RESEARCH') {
+            const currentResult = res.paragraphs[index].output[0]?.result;
+            if (!currentResult) {
+              continue;
+            }
+            const {
+              task_id: taskId,
+              agent_id: agentId,
+              state,
+              base_memory_id: baseMemoryId,
+            } = JSON.parse(currentResult);
+            const paragraphId = res.paragraphs[index].id;
+
+            if (isStateCompletedOrFailed(state)) {
+              continue;
+            }
+
+            this._registerDeepResearchParagraphUpdater({
+              taskId,
+              agentId,
+              paraUniqueId: paragraphId,
+              baseMemoryId,
+            });
           }
         }
         this.setState(res, this.parseAllParagraphs);
@@ -1259,6 +1403,7 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
                       handleSelectedDataSourceChange={this.handleSelectedDataSourceChange}
                       paradataSourceMDSId={this.state.parsedPara[index].dataSourceMDSId}
                       dataSourceMDSLabel={this.state.parsedPara[index].dataSourceMDSLabel}
+                      paragraphs={this.state.parsedPara}
                     />
                   </div>
                 ))}

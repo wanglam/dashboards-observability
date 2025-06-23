@@ -3,7 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { getMLCommonsMemoryMessages, getMLCommonsMessageTraces } from './apis';
+import {
+  getMLCommonsMemoryMessages,
+  getMLCommonsMessageTraces,
+} from '../../../../utils/ml_commons_apis';
 
 export interface Trace {
   input: string;
