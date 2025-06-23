@@ -88,7 +88,7 @@ export function registerMLCommonsRoutes(router: IRouter) {
         });
         return response.ok({ body });
       } catch (e) {
-        if (e.meta.body.status === 404) {
+        if (e.meta?.body?.status === 404) {
           return response.ok({ body: { hits: { hits: [] } } });
         }
         return response.badRequest({ body: e.message });
@@ -134,7 +134,7 @@ export function registerMLCommonsRoutes(router: IRouter) {
         });
         return response.ok({ body });
       } catch (e) {
-        if (e.meta.body.status === 404) {
+        if (e.meta?.body?.status === 404) {
           return response.ok({ body: { messages: [] } });
         }
         return response.badRequest({ body: e.message });
@@ -178,7 +178,7 @@ export function registerMLCommonsRoutes(router: IRouter) {
         });
         return response.ok({ body });
       } catch (e) {
-        if (e.meta.body.status === 404) {
+        if (e.meta?.body?.status === 404) {
           return response.ok({ body: [] });
         }
         return response.badRequest({ body: e.message });
@@ -228,7 +228,7 @@ export function registerMLCommonsRoutes(router: IRouter) {
         });
         return response.ok({ body });
       } catch (e) {
-        if (e.meta.body.status === 404) {
+        if (e.meta?.body?.status === 404) {
           return response.ok({ body: { hits: { hits: [] } } });
         }
         return response.badRequest({ body: e.message });
