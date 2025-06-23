@@ -175,7 +175,7 @@ const OutputBody = ({
       case 'IMG':
         return <img alt="" src={'data:image/gif;base64,' + val} key={key} />;
       case 'DEEP_RESEARCH':
-        return <DeepResearchContainer http={http} para={para} />;
+        return <DeepResearchContainer http={http} para={para} onTaskFinish={() => {}} />;
       default:
         return <pre key={key}>{val}</pre>;
     }

@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { OBSERVABILITY_ML_COMMONS_API } from '../../../../../common/constants/ml_commons';
-import { CoreStart } from '../../../../../../../src/core/public';
+import { OBSERVABILITY_ML_COMMONS_API } from '../../common/constants/ml_commons';
+import { CoreStart } from '../../../../src/core/public';
 
 export const getMLCommonsTask = async ({
   http,
