@@ -90,7 +90,20 @@ export const SOPContainer = ({ para, http }: Props) => {
         ) {
           const llmTraces = latestExecutorMessageTraces.filter(({ origin }) => origin === 'LLM');
           if (llmTraces.length > 0) {
-            children = <>{llmTraces[llmTraces.length - 1].input}</>;
+            const latestLLMTrace = llmTraces[llmTraces.length - 1];
+            console.log(latestLLMTrace);
+            if (latestLLMTrace) {
+              try {
+                children = (
+                  <>
+                    {JSON.parse(latestLLMTrace.response).output?.message?.content[0]?.text ||
+                      latestLLMTrace.input}
+                  </>
+                );
+              } catch (e) {
+                console.log('Failed to parse llm response', e);
+              }
+            }
           }
         }
 
