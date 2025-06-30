@@ -166,6 +166,18 @@ export async function updateRunFetchParagraph(
       // Add error catch here..
     }
   }
+  let sopAgentId: string | undefined;
+  if (params.paragraphInput.substring(0, 4) === '%sop') {
+    try {
+      const { body } = await transport.request({
+        method: 'GET',
+        path: '/_plugins/_ml/config/os_sop',
+      });
+      sopAgentId = body.configuration.agent_id;
+    } catch (error) {
+      // Add error catch here..
+    }
+  }
   try {
     const notebookinfo = await fetchNotebook(params.noteId, opensearchNotebooksClient);
     const updatedInputParagraphs = updateParagraphs(
@@ -182,7 +194,8 @@ export async function updateRunFetchParagraph(
       transport,
       deepResearchAgentId,
       params.deepResearchContext,
-      params.deepResearchBaseMemoryId
+      params.deepResearchBaseMemoryId,
+      sopAgentId
     );
 
     const updateNotebook = {
@@ -212,7 +225,8 @@ export async function runParagraph(
   transport: OpenSearchClient['transport'],
   deepResearchAgentId: string | undefined,
   deepResearchContext: string | undefined,
-  deepResearchBaseMemoryId: string | undefined
+  deepResearchBaseMemoryId: string | undefined,
+  sopAgentId: string | undefined
 ) {
   try {
     const updatedParagraphs = [];
@@ -220,9 +234,10 @@ export async function runParagraph(
     for (index = 0; index < paragraphs.length; ++index) {
       const startTime = now();
       const updatedParagraph = { ...paragraphs[index] };
+      const inputText = paragraphs[index].input.inputText;
       if (paragraphs[index].id === paragraphId) {
         updatedParagraph.dateModified = new Date().toISOString();
-        if (inputIsQuery(paragraphs[index].input.inputText)) {
+        if (inputIsQuery(inputText)) {
           updatedParagraph.output = [
             {
               outputType: 'QUERY',
@@ -233,7 +248,7 @@ export async function runParagraph(
               execution_time: `${(now() - startTime).toFixed(3)} ms`,
             },
           ];
-        } else if (paragraphs[index].input.inputText.substring(0, 3) === '%md') {
+        } else if (inputText.substring(0, 3) === '%md') {
           updatedParagraph.output = [
             {
               outputType: 'MARKDOWN',
@@ -296,7 +311,42 @@ export async function runParagraph(
               execution_time: `${(now() - startTime).toFixed(3)} ms`,
             },
           ];
-        } else if (formatNotRecognized(paragraphs[index].input.inputText)) {
+        } else if (inputText.substring(0, 4) === '%sop') {
+          if (!sopAgentId) {
+            throw new Error('No sop agent found.');
+          }
+          updatedParagraph.dateModified = new Date().toISOString();
+          const sop = [
+            'Find related indices of cloudwatch',
+            'Get Schema of related indices',
+            'find logs in the related indices which containing out of memory and judge result',
+          ];
+          const { body } = await transport.request({
+            method: 'POST',
+            path: `/_plugins/_ml/agents/${sopAgentId}/_execute`,
+            querystring: 'async=true',
+            body: {
+              parameters: {
+                question: inputText,
+                sop,
+              },
+            },
+          });
+          updatedParagraph.output = [
+            {
+              outputType: 'SOP',
+              result: JSON.stringify({
+                taskId: body.task_id,
+                memoryId: body.response?.memory_id,
+                parentInteractionId: body.response?.parent_interaction_id,
+                agentId: sopAgentId,
+                state: body.status,
+                sop,
+              }),
+              execution_time: `${(now() - startTime).toFixed(3)} ms`,
+            },
+          ];
+        } else if (formatNotRecognized(inputText)) {
           updatedParagraph.output = [
             {
               outputType: 'MARKDOWN',

@@ -649,6 +649,43 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
     });
   };
 
+  private _registerSOPParagraphUpdater = ({
+    paraUniqueId,
+    originalParsedResult,
+  }: {
+    paraUniqueId: string;
+    originalParsedResult: Record<string, any>;
+  }) => {
+    this._registerTaskParagraphUpdater({
+      taskId: originalParsedResult.taskId,
+      paraUniqueId,
+      outputGenerator({ task }) {
+        const inferenceResult = task.response?.inference_results?.[0];
+        const executorMemoryId =
+          task.response?.executor_agent_memory_id ??
+          inferenceResult?.output.find(({ name }) => name === 'executor_agent_memory_id')?.result ??
+          undefined;
+        let textResponse;
+        if (task.state === 'FAILED') {
+          textResponse = task.response.error_message;
+        } else if (task.state === 'COMPLETED') {
+          textResponse =
+            inferenceResult?.output.find(({ name }) => name === 'response').dataAsMap.response ??
+            undefined;
+        }
+        return {
+          outputType: 'SOP',
+          result: JSON.stringify({
+            ...originalParsedResult,
+            executorMemoryId,
+            textResponse,
+            state: task.state,
+          }),
+        };
+      },
+    });
+  };
+
   // Backend call to update and run contents of paragraph
   updateRunParagraph = (
     para: ParaType,
@@ -683,23 +720,38 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
         body: JSON.stringify(paraUpdateObject),
       })
       .then(async (res) => {
-        if (res.output[0]?.outputType === 'QUERY') {
+        const firstOutputType = res.output[0]?.outputType;
+        if (firstOutputType === 'QUERY') {
           await this.loadQueryResultsFromInput(res, this.state.dataSourceMDSId);
           const checkErrorJSON = JSON.parse(res.output[0].result);
           if (this.checkQueryOutputError(checkErrorJSON)) {
             return;
           }
         }
+
         const legacyParsedParagraphData = this.state.parsedPara[index];
         const paragraphs = this.state.paragraphs;
         paragraphs[index] = res;
         const parsedPara = [...this.state.parsedPara];
         parsedPara[index] = this.parseParagraphs([res])[0];
 
-        if (res.output[0]?.outputType === 'DEEP_RESEARCH') {
+        if (firstOutputType === 'SOP') {
           parsedPara[index].isRunning = true;
-          const legacyParsedParagraphOut = parseParagraphOut(legacyParsedParagraphData)[0];
-          const legacyTaskId = legacyParsedParagraphOut?.task_id;
+          const legacyTaskId = parseParagraphOut(legacyParsedParagraphData)[0]?.taskId;
+          if (legacyTaskId) {
+            this._taskSubscriptions.get(legacyTaskId)?.unsubscribe();
+            this._taskSubscriptions.delete(legacyTaskId);
+          }
+          const parsedParagraphOut = parseParagraphOut(parsedPara[index])[0];
+          this._registerSOPParagraphUpdater({
+            paraUniqueId: para.uniqueId,
+            originalParsedResult: parsedParagraphOut,
+          });
+        }
+
+        if (firstOutputType === 'DEEP_RESEARCH') {
+          parsedPara[index].isRunning = true;
+          const legacyTaskId = parseParagraphOut(legacyParsedParagraphData)[0]?.task_id;
           if (legacyTaskId) {
             this._taskSubscriptions.get(legacyTaskId)?.unsubscribe();
             this._taskSubscriptions.delete(legacyTaskId);
@@ -826,6 +878,22 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
             await this.loadQueryResultsFromInput(res.paragraphs[index]);
           } else if (res.paragraphs[index].output[0]?.outputType === 'QUERY') {
             await this.loadQueryResultsFromInput(res.paragraphs[index], '');
+          } else if (res.paragraphs[index].output[0]?.outputType === 'SOP') {
+            const currentResult = res.paragraphs[index].output[0]?.result;
+            if (!currentResult) {
+              continue;
+            }
+            const originalParsedResult = JSON.parse(currentResult);
+            const paragraphId = res.paragraphs[index].id;
+
+            if (isStateCompletedOrFailed(originalParsedResult.state)) {
+              continue;
+            }
+
+            this._registerSOPParagraphUpdater({
+              paraUniqueId: paragraphId,
+              originalParsedResult,
+            });
           } else if (res.paragraphs[index].output[0]?.outputType === 'DEEP_RESEARCH') {
             const currentResult = res.paragraphs[index].output[0]?.result;
             if (!currentResult) {
