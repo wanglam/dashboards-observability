@@ -107,11 +107,21 @@ export const MessageTraceModal = ({
     }
     return traces.map(({ input, response, message_id: traceMessageId, origin }, index) => {
       const isFromLLM = origin?.toLowerCase() === 'llm';
+      let llmReasoning;
+      if (isFromLLM) {
+        try {
+          llmReasoning = JSON.parse(response).output.message.content[0]?.text;
+        } catch (e) {
+          console.log('Failed to parse response', e);
+        }
+      }
       return (
         <React.Fragment key={traceMessageId}>
           <EuiAccordion
             id={`trace-${index}`}
-            buttonContent={`Step ${index + 1} - ${isFromLLM ? input : `Execute ${origin}`}`}
+            buttonContent={`Step ${index + 1} - ${
+              isFromLLM ? llmReasoning || input : `Execute ${origin}`
+            }`}
             paddingSize="l"
           >
             <EuiText className="wrapAll markdown-output-text" size="s">
