@@ -5,8 +5,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import MarkdownRender from '@nteract/markdown';
 import { EuiButton, EuiLoadingContent, EuiText, EuiAccordion, EuiSpacer } from '@elastic/eui';
-import { interval } from 'rxjs';
-import { switchMap, takeWhile } from 'rxjs/operators';
+import { of, timer } from 'rxjs';
+import { concatMap, expand, skip, takeWhile } from 'rxjs/operators';
 
 import { CoreStart } from '../../../../../../../src/core/public';
 import { ParaType } from '../../../../../common/types/notebooks';
@@ -63,34 +63,39 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
       return;
     }
     const abortController = new AbortController();
-    const subscription = interval(5000)
+    const subscription = of(null)
       .pipe(
-        switchMap(() => {
-          const {
-            parent_interaction_id: parentInteractionId,
-            executor_memory_id: executorMemoryId,
-          } = parsedParagraphOut;
+        expand(() =>
+          timer(5000).pipe(
+            concatMap(() => {
+              const {
+                parent_interaction_id: parentInteractionId,
+                executor_memory_id: executorMemoryId,
+              } = parsedParagraphOut;
 
-          return Promise.allSettled([
-            parentInteractionId
-              ? getAllTracesByMessageId({
-                  messageId: parentInteractionId,
-                  http,
-                  signal: abortController.signal,
-                  dataSourceId: dataSourceIdRef.current,
-                })
-              : Promise.resolve([]),
-            executorMemoryId
-              ? getAllMessagesByMemoryId({
-                  memoryId: executorMemoryId,
-                  http,
-                  signal: abortController.signal,
-                  dataSourceId: dataSourceIdRef.current,
-                })
-              : Promise.resolve([]),
-          ]);
-        })
+              return Promise.allSettled([
+                parentInteractionId
+                  ? getAllTracesByMessageId({
+                      messageId: parentInteractionId,
+                      http,
+                      signal: abortController.signal,
+                      dataSourceId: dataSourceIdRef.current,
+                    })
+                  : Promise.resolve([]),
+                executorMemoryId
+                  ? getAllMessagesByMemoryId({
+                      memoryId: executorMemoryId,
+                      http,
+                      signal: abortController.signal,
+                      dataSourceId: dataSourceIdRef.current,
+                    })
+                  : Promise.resolve([]),
+              ]);
+            })
+          )
+        )
       )
+      .pipe(skip(1))
       .pipe(
         takeWhile(() => {
           return !isStateCompletedOrFailed(parsedParagraphOut.state);
@@ -151,10 +156,13 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
     if (isStateCompletedOrFailed(parsedParagraphOut.state)) {
       return false;
     }
-    const traceMessage = executorMessages.find(
+    const traceMessageIndex = executorMessages.findIndex(
       ({ message_id: messageId }) => messageId === traceModalData.messageId
     );
-    return !traceMessage?.response;
+    if (traceMessageIndex + 1 < executorMessages.length) {
+      return false;
+    }
+    return !executorMessages[traceMessageIndex]?.response;
   };
 
   return (

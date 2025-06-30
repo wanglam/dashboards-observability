@@ -31,8 +31,8 @@ import moment from 'moment';
 import queryString from 'query-string';
 import React, { Component } from 'react';
 import { RouteComponentProps } from 'react-router-dom';
-import { Subscription, timer } from 'rxjs';
-import { switchMap, takeWhile } from 'rxjs/operators';
+import { Subscription, timer, of } from 'rxjs';
+import { concatMap, expand, skip, takeWhile } from 'rxjs/operators';
 
 import {
   ChromeBreadcrumb,
@@ -526,16 +526,17 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
       });
   };
 
-  private _registerDeepResearchParagraphUpdater = ({
+  private _registerTaskParagraphUpdater = ({
     taskId,
     paraUniqueId,
-    agentId,
-    baseMemoryId,
+    outputGenerator,
   }: {
     taskId: string;
     paraUniqueId: string;
-    agentId: string;
-    baseMemoryId?: string | undefined;
+    outputGenerator: (params: {
+      task: Record<string, any>;
+      taskId: string;
+    }) => { outputType: string; result: string };
   }) => {
     const cleanTaskSubscription = () => {
       this._taskSubscriptions.get(taskId)?.unsubscribe();
@@ -543,20 +544,27 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
     };
     this._taskSubscriptions.set(
       taskId,
-      timer(0, 5000)
+      of(null)
         .pipe(
-          switchMap(() => {
-            const parsePara = this.state.parsedPara.find((para) => para.uniqueId === paraUniqueId);
-            if (!parsePara) {
-              return 'STOP';
-            }
-            return getMLCommonsTask({
-              http: this.props.http,
-              taskId,
-              dataSourceId: parsePara.dataSourceMDSId,
-            });
-          })
+          expand(() =>
+            timer(5000).pipe(
+              concatMap(() => {
+                const parsePara = this.state.parsedPara.find(
+                  (para) => para.uniqueId === paraUniqueId
+                );
+                if (!parsePara) {
+                  return 'STOP';
+                }
+                return getMLCommonsTask({
+                  http: this.props.http,
+                  taskId,
+                  dataSourceId: parsePara.dataSourceMDSId,
+                });
+              })
+            )
+          )
         )
+        .pipe(skip(1))
         .pipe(takeWhile((res) => res !== 'STOP' && !isStateCompletedOrFailed(res.state), true))
         .subscribe({
           next: (payload) => {
@@ -567,18 +575,12 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
             const currentParsedParaIndex = this.state.parsedPara.findIndex(
               (para) => para.uniqueId === paraUniqueId
             );
-            const result = JSON.stringify(
-              constructDeepResearchParagraphOut({
-                task: payload,
-                taskId,
-                agentId,
-                baseMemoryId,
-              })
-            );
-            if (
-              !isStateCompletedOrFailed(payload.state) &&
-              result === this.state.parsedPara[currentParsedParaIndex]?.out[0]
-            ) {
+            const originalResult = this.state.parsedPara[currentParsedParaIndex]?.out[0];
+            const { result, outputType } = outputGenerator({
+              task: payload,
+              taskId,
+            });
+            if (!isStateCompletedOrFailed(payload.state) && result === originalResult) {
               return;
             }
             if (isStateCompletedOrFailed(payload.state)) {
@@ -602,7 +604,7 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
                 paragraphId: paraUniqueId,
                 paragraphOutput: [
                   {
-                    outputType: 'DEEP_RESEARCH',
+                    outputType,
                     result,
                   },
                 ],
@@ -615,6 +617,36 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
           },
         })
     );
+  };
+
+  private _registerDeepResearchParagraphUpdater = ({
+    taskId,
+    paraUniqueId,
+    agentId,
+    baseMemoryId,
+  }: {
+    taskId: string;
+    paraUniqueId: string;
+    agentId: string;
+    baseMemoryId?: string | undefined;
+  }) => {
+    this._registerTaskParagraphUpdater({
+      taskId,
+      paraUniqueId,
+      outputGenerator(params) {
+        return {
+          outputType: 'DEEP_RESEARCH',
+          result: JSON.stringify(
+            constructDeepResearchParagraphOut({
+              task: params.task,
+              taskId,
+              agentId,
+              baseMemoryId,
+            })
+          ),
+        };
+      },
+    });
   };
 
   // Backend call to update and run contents of paragraph
