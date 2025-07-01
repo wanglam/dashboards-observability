@@ -85,24 +85,28 @@ export const SOPContainer = ({ para, http }: Props) => {
         }
 
         if (
+          traceExecutorMessageId &&
           traceExecutorMessageId === executorMessages[index]?.message_id &&
           latestExecutorMessageTraces.length > 0
         ) {
           const llmTraces = latestExecutorMessageTraces.filter(({ origin }) => origin === 'LLM');
           if (llmTraces.length > 0) {
             const latestLLMTrace = llmTraces[llmTraces.length - 1];
-            console.log(latestLLMTrace);
             if (latestLLMTrace) {
-              try {
-                children = (
-                  <>
-                    {JSON.parse(latestLLMTrace.response).output?.message?.content[0]?.text ||
-                      latestLLMTrace.input}
-                  </>
-                );
-              } catch (e) {
-                console.log('Failed to parse llm response', e);
+              let parsedLatestTraceResponse;
+              if (latestLLMTrace.response) {
+                try {
+                  parsedLatestTraceResponse = JSON.parse(latestLLMTrace.response);
+                } catch (e) {
+                  console.log('Failed to parse llm response', e);
+                }
               }
+              children = (
+                <>
+                  {parsedLatestTraceResponse?.output?.message?.content[0]?.text ??
+                    latestLLMTrace.input}
+                </>
+              );
             }
           }
         }
