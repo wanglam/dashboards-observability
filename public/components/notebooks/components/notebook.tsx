@@ -656,6 +656,9 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
     paraUniqueId: string;
     originalParsedResult: Record<string, any>;
   }) => {
+    if (!originalParsedResult.taskId) {
+      return;
+    }
     this._registerTaskParagraphUpdater({
       taskId: originalParsedResult.taskId,
       paraUniqueId,

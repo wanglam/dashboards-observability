@@ -316,6 +316,40 @@ export async function runParagraph(
             throw new Error('No sop agent found.');
           }
           updatedParagraph.dateModified = new Date().toISOString();
+          const question = inputText.substring(4);
+          const { body: sopSearchBody } = await transport.request({
+            method: 'POST',
+            path: `/agentic-sop/_search`,
+            body: {
+              query: {
+                multi_match: {
+                  query: question,
+                  fields: ['title^2', 'steps'],
+                  type: 'best_fields',
+                  fuzziness: 'AUTO',
+                },
+              },
+              size: 1,
+            },
+          });
+          const sop = sopSearchBody?.hits?.hits?.filter((item) => item._score > 2)?.[0]?._source
+            ?.steps;
+
+          if (!sop || !Array.isArray(sop) || sop.length === 0) {
+            updatedParagraph.output = [
+              {
+                outputType: 'SOP',
+                result: JSON.stringify({
+                  state: 'FAILED',
+                  textResponse: 'Failed to find related SOP, try another question',
+                }),
+                execution_time: `${(now() - startTime).toFixed(3)} ms`,
+              },
+            ];
+            updatedParagraphs.push(updatedParagraph);
+            break;
+          }
+
           const { body: memoryBody } = await transport.request({
             method: 'POST',
             path: `/_plugins/_ml/memory`,
@@ -326,11 +360,6 @@ export async function runParagraph(
             },
           });
           const executorMemoryId = memoryBody.memory_id;
-          const sop = [
-            'Find related indices of cloudwatch',
-            'Get Schema of related indices',
-            'find logs in the related indices which containing out of memory and judge result',
-          ];
           const { body } = await transport.request({
             method: 'POST',
             path: `/_plugins/_ml/agents/${sopAgentId}/_execute`,
