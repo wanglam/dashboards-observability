@@ -664,7 +664,7 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
         const executorMemoryId =
           task.response?.executor_agent_memory_id ??
           inferenceResult?.output.find(({ name }) => name === 'executor_agent_memory_id')?.result ??
-          undefined;
+          originalParsedResult.executorMemoryId;
         let textResponse;
         if (task.state === 'FAILED') {
           textResponse = task.response.error_message;
