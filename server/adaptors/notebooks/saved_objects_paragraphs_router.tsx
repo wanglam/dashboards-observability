@@ -316,6 +316,16 @@ export async function runParagraph(
             throw new Error('No sop agent found.');
           }
           updatedParagraph.dateModified = new Date().toISOString();
+          const { body: memoryBody } = await transport.request({
+            method: 'POST',
+            path: `/_plugins/_ml/memory`,
+            body: {
+              parameters: {
+                name: inputText,
+              },
+            },
+          });
+          const executorMemoryId = memoryBody.memory_id;
           const sop = [
             'Find related indices of cloudwatch',
             'Get Schema of related indices',
@@ -329,6 +339,7 @@ export async function runParagraph(
               parameters: {
                 question: inputText,
                 sop,
+                executor_agent_memory_id: executorMemoryId,
               },
             },
           });
@@ -342,6 +353,7 @@ export async function runParagraph(
                 agentId: sopAgentId,
                 state: body.status,
                 sop,
+                executorMemoryId,
               }),
               execution_time: `${(now() - startTime).toFixed(3)} ms`,
             },
