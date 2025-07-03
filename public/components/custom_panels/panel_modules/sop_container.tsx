@@ -126,9 +126,8 @@ export const SOPContainer = ({ para, http }: Props) => {
     const abortController = new AbortController();
     setIsLoadingStepResponse(true);
     if (taskFinished) {
-      const { executorMemoryId } = parsedParagraphOut;
       getAllMessagesByMemoryId({
-        memoryId: executorMemoryId,
+        memoryId: parsedParagraphOut.executorMemoryId,
         http,
         signal: abortController.signal,
         dataSourceId: dataSourceIdRef.current,
@@ -146,7 +145,7 @@ export const SOPContainer = ({ para, http }: Props) => {
         expand(() =>
           timer(5000).pipe(
             concatMap(() => {
-              const { executorMemoryId } = parsedParagraphOut;
+              const executorMemoryId = parsedParagraphOut.executorMemoryId;
               return executorMemoryId
                 ? getAllMessagesByMemoryId({
                     memoryId: executorMemoryId,
@@ -167,7 +166,7 @@ export const SOPContainer = ({ para, http }: Props) => {
       subscription.unsubscribe();
       abortController.abort('SOPContainer unmount.');
     };
-  }, [taskFinished, parsedParagraphOut, http]);
+  }, [taskFinished, parsedParagraphOut.executorMemoryId, http]);
 
   useEffect(() => {
     if (!traceExecutorMessageId) {
