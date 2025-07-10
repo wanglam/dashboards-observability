@@ -342,7 +342,7 @@ ${ORIGINAL_DEEP_RESEARCH_EXECUTOR_SYSTEM_PROMPT}`.trim(),
               query: {
                 multi_match: {
                   query: question,
-                  fields: ['title^2', 'steps'],
+                  fields: ['title^2', 'sop'],
                   type: 'best_fields',
                   fuzziness: 'AUTO',
                 },
@@ -350,10 +350,9 @@ ${ORIGINAL_DEEP_RESEARCH_EXECUTOR_SYSTEM_PROMPT}`.trim(),
               size: 1,
             },
           });
-          const sop = sopSearchBody?.hits?.hits?.filter((item) => item._score > 2)?.[0]?._source
-            ?.steps;
+          const sop = sopSearchBody?.hits?.hits?.[0]?._source?.sop;
 
-          if (!sop || !Array.isArray(sop) || sop.length === 0) {
+          if (!sop) {
             updatedParagraph.output = [
               {
                 outputType: 'SOP',
@@ -367,17 +366,6 @@ ${ORIGINAL_DEEP_RESEARCH_EXECUTOR_SYSTEM_PROMPT}`.trim(),
             updatedParagraphs.push(updatedParagraph);
             break;
           }
-
-          const { body: memoryBody } = await transport.request({
-            method: 'POST',
-            path: `/_plugins/_ml/memory`,
-            body: {
-              parameters: {
-                name: inputText,
-              },
-            },
-          });
-          const executorMemoryId = memoryBody.memory_id;
           const { body } = await transport.request({
             method: 'POST',
             path: `/_plugins/_ml/agents/${sopAgentId}/_execute`,
@@ -386,7 +374,6 @@ ${ORIGINAL_DEEP_RESEARCH_EXECUTOR_SYSTEM_PROMPT}`.trim(),
               parameters: {
                 question: inputText,
                 sop,
-                executor_agent_memory_id: executorMemoryId,
               },
             },
           });
@@ -400,7 +387,6 @@ ${ORIGINAL_DEEP_RESEARCH_EXECUTOR_SYSTEM_PROMPT}`.trim(),
                 agentId: sopAgentId,
                 state: body.status,
                 sop,
-                executorMemoryId,
               }),
               execution_time: `${(now() - startTime).toFixed(3)} ms`,
             },

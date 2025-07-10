@@ -4,16 +4,132 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import MarkdownRender from '@nteract/markdown';
-import { EuiLoadingContent, EuiText, EuiSteps, EuiStepStatus } from '@elastic/eui';
+import { EuiLoadingContent, EuiText, EuiSteps } from '@elastic/eui';
 import { of, timer } from 'rxjs';
 import { concatMap, expand } from 'rxjs/operators';
 
 import { CoreStart } from '../../../../../../src/core/public';
 import { ParaType } from '../../../../common/types/notebooks';
 
-import { getAllMessagesByMemoryId, getAllTracesByMessageId } from './deep_research_container/utils';
+import { getAllTracesByMessageId } from './deep_research_container/utils';
 import { parseParagraphOut } from '../../../utils/paragraph';
 import { isStateCompletedOrFailed } from '../../../utils/task';
+
+interface SOP {
+  entranceCondition?: string;
+  currentStep: string;
+  judgement?: string;
+  nextSteps: SOP[];
+}
+
+interface Message {
+  memory_id: string;
+  message_id: string;
+  create_time: string;
+  input: string;
+  response?: string;
+  origin: string;
+  parent_message_id?: string;
+  trace_number: number;
+}
+
+const nextOptionRegExp = /<next_option>.*(\d+).*<\/next_option>$/;
+
+const buildSOPSteps = (
+  sop: SOP,
+  messages: Message[]
+): Array<{
+  title: string;
+  content?: string;
+  status: 'loading' | 'complete' | 'danger';
+  options?: string[];
+}> => {
+  const stepInMessagesIndex = messages.findIndex((message) => message.input === sop.currentStep);
+  if (sop.nextSteps.length === 0) {
+    return [
+      {
+        title: sop.currentStep,
+        status: 'complete' as const,
+      },
+    ];
+  }
+  if (stepInMessagesIndex === -1 || (!messages[stepInMessagesIndex].response && !sop.judgement)) {
+    return [
+      {
+        title: sop.currentStep,
+        status: 'loading' as const,
+      },
+    ];
+  }
+  const steps = [
+    {
+      title: sop.currentStep,
+      status: 'complete' as const,
+      content: messages[stepInMessagesIndex].response,
+    },
+  ];
+  if (!sop.judgement) {
+    return sop.nextSteps
+      ? [...steps, ...buildSOPSteps(sop.nextSteps[0], messages.slice(stepInMessagesIndex))]
+      : steps;
+  }
+  const judgementStepTitle = `JUDGEMENT: ${sop.judgement}`;
+  if (!messages[stepInMessagesIndex + 1] || !messages[stepInMessagesIndex + 1].response) {
+    return [
+      ...steps,
+      {
+        title: judgementStepTitle,
+        status: 'loading' as const,
+        content: `
+${sop.nextSteps.map(
+  ({ entranceCondition }, index) => `#### Option ${index + 1}: ${entranceCondition}`
+).join(`
+`)}
+`,
+      },
+    ];
+  }
+
+  const judgementResponse = messages[stepInMessagesIndex + 1].response;
+  const result = judgementResponse && nextOptionRegExp.exec(judgementResponse);
+  if (!result || !result[1]) {
+    return [
+      ...steps,
+      {
+        title: judgementStepTitle,
+        status: 'danger' as const,
+        content: 'No step matched from judgement response message',
+      },
+    ];
+  }
+  const nextStep = parseInt(result[1], 10) - 1;
+  if (!sop.nextSteps[nextStep]) {
+    return [
+      {
+        title: judgementStepTitle,
+        status: 'danger' as const,
+        content: `No matching step ${nextStep} in SOP`,
+      },
+    ];
+  }
+  return [
+    ...steps,
+    {
+      title: judgementStepTitle,
+      status: 'complete' as const,
+      content: `
+${sop.nextSteps.map(
+  ({ entranceCondition }, index) =>
+    `#### Option ${index + 1}: ${entranceCondition}${index === nextStep ? '(Prefer)' : ''}`
+).join(`
+`)}
+
+${judgementResponse.replace(nextOptionRegExp, '').trim()}
+`.trim(),
+    },
+    ...buildSOPSteps(sop.nextSteps[nextStep], messages.slice(stepInMessagesIndex + 1)),
+  ];
+};
 
 interface Props {
   http: CoreStart['http'];
@@ -23,9 +139,12 @@ interface Props {
 export const SOPContainer = ({ para, http }: Props) => {
   const parsedParagraphOut = useMemo(() => parseParagraphOut(para)[0], [para]);
   const taskFinished = isStateCompletedOrFailed(parsedParagraphOut.state);
-  const [isLoadingStepResponse, setIsLoadingStepResponse] = useState(taskFinished);
-  const [executorMessages, setExecutorMessages] = useState([]);
-  const [latestExecutorMessageTraces, setLatestExecutorMessageTraces] = useState([]);
+  const [messageTraces, setMessageTraces] = useState([]);
+  const [shouldShowLoading, setShouldShowLoading] = useState(
+    taskFinished && parsedParagraphOut.parentInteractionId
+  );
+  const loadedMessageTracesRef = useRef(messageTraces);
+  loadedMessageTracesRef.current = messageTraces;
   const initialFinalResponseVisible = useRef(false);
 
   initialFinalResponseVisible.current = parsedParagraphOut.textResponse;
@@ -47,161 +166,111 @@ export const SOPContainer = ({ para, http }: Props) => {
     return '';
   }, [parsedParagraphOut]);
 
-  const traceExecutorMessageId = useMemo(() => {
-    if (
-      taskFinished ||
-      executorMessages.length === 0 ||
-      executorMessages[executorMessages.length - 1].response
-    ) {
-      return;
-    }
-    return executorMessages[executorMessages.length - 1].message_id;
-  }, [executorMessages, taskFinished]);
-
   const steps = useMemo(() => {
-    const sop = parsedParagraphOut.sop;
-    if (Array.isArray(sop)) {
-      return sop.map((step, index) => {
-        let status: EuiStepStatus = 'incomplete';
-        const stepResponse = executorMessages[index]?.response;
-        let children = stepResponse ? (
-          <EuiText className="wrapAll markdown-output-text" size="s">
-            <MarkdownRender source={stepResponse} />
-          </EuiText>
-        ) : undefined;
-        if (stepResponse) {
-          status = 'complete';
-        } else if (
-          !taskFinished &&
-          (index === 0 || executorMessages[index]) &&
-          !executorMessages[index + 1]
-        ) {
-          status = 'loading';
-        } else if (taskFinished && isLoadingStepResponse) {
-          status = 'loading';
-          children = <EuiLoadingContent />;
-        } else if (taskFinished) {
-          status = 'warning';
-        }
-
-        if (
-          traceExecutorMessageId &&
-          traceExecutorMessageId === executorMessages[index]?.message_id &&
-          latestExecutorMessageTraces.length > 0
-        ) {
-          const llmTraces = latestExecutorMessageTraces.filter(({ origin }) => origin === 'LLM');
-          if (llmTraces.length > 0) {
-            const latestLLMTrace = llmTraces[llmTraces.length - 1];
-            if (latestLLMTrace) {
-              let parsedLatestTraceResponse;
-              if (latestLLMTrace.response) {
-                try {
-                  parsedLatestTraceResponse = JSON.parse(latestLLMTrace.response);
-                } catch (e) {
-                  console.log('Failed to parse llm response', e);
-                }
-              }
-              children = (
-                <>
-                  {parsedLatestTraceResponse?.output?.message?.content[0]?.text ??
-                    latestLLMTrace.input}
-                </>
-              );
-            }
-          }
-        }
-
-        return {
-          step: index + 1,
-          title: step,
-          children,
-          status,
-        };
-      });
+    const { sop: originalSOP } = parsedParagraphOut;
+    let sop = originalSOP;
+    if (typeof sop === 'string') {
+      try {
+        sop = JSON.parse(originalSOP);
+      } catch (e) {
+        console.error('Failed to parse SOP', e);
+      }
     }
-    return [];
-  }, [taskFinished, executorMessages, latestExecutorMessageTraces, traceExecutorMessageId]);
+    // TODO: Remove this check in production, linear SOP won't support anymore.
+    if (Array.isArray(sop)) {
+      return [];
+    }
+    if (!sop || typeof sop !== 'object') {
+      return [];
+    }
+    const sopSteps = buildSOPSteps(sop, messageTraces);
+    return sopSteps.map(({ title, status, content }, index) => {
+      return {
+        step: index + 1,
+        title,
+        children: content ? (
+          <EuiText className="wrapAll markdown-output-text" size="s">
+            <MarkdownRender source={content} />
+          </EuiText>
+        ) : (
+          <></>
+        ),
+        status,
+      };
+    });
+  }, [taskFinished, messageTraces, parsedParagraphOut.sop]);
 
   useEffect(() => {
+    if (!parsedParagraphOut.parentInteractionId) {
+      return;
+    }
     const abortController = new AbortController();
-    setIsLoadingStepResponse(true);
+
     if (taskFinished) {
-      getAllMessagesByMemoryId({
-        memoryId: parsedParagraphOut.executorMemoryId,
+      let canceled = false;
+      if (loadedMessageTracesRef.current.length === 0) {
+        setShouldShowLoading(true);
+      }
+
+      getAllTracesByMessageId({
+        messageId: parsedParagraphOut.parentInteractionId,
         http,
         signal: abortController.signal,
         dataSourceId: dataSourceIdRef.current,
       })
-        .then((messages) => {
-          setExecutorMessages(messages);
+        .then((traces) => {
+          setMessageTraces(traces);
+        })
+        .catch((error) => {
+          if (error.name !== 'AbortError') {
+            console.error('Failed to load message traces:', error);
+          }
         })
         .finally(() => {
-          setIsLoadingStepResponse(false);
+          if (!canceled) {
+            setShouldShowLoading(false);
+          }
         });
-      return;
+      return () => {
+        canceled = true;
+        abortController.abort();
+      };
     }
+    setShouldShowLoading(true);
     const subscription = of([])
       .pipe(
         expand(() =>
           timer(5000).pipe(
             concatMap(() => {
-              const executorMemoryId = parsedParagraphOut.executorMemoryId;
-              return executorMemoryId
-                ? getAllMessagesByMemoryId({
-                    memoryId: executorMemoryId,
-                    http,
-                    signal: abortController.signal,
-                    dataSourceId: dataSourceIdRef.current,
-                  })
-                : Promise.resolve([]);
+              return getAllTracesByMessageId({
+                messageId: parsedParagraphOut.parentInteractionId,
+                http,
+                signal: abortController.signal,
+                dataSourceId: dataSourceIdRef.current,
+              }).catch((error) => {
+                console.error('Failed to get all messages', error);
+                return loadedMessageTracesRef.current;
+              });
             })
           )
         )
       )
-      .subscribe((messages) => {
-        setExecutorMessages(messages);
-      });
-
-    return () => {
-      subscription.unsubscribe();
-      abortController.abort('SOPContainer unmount.');
-    };
-  }, [taskFinished, parsedParagraphOut.executorMemoryId, http]);
-
-  useEffect(() => {
-    if (!traceExecutorMessageId) {
-      return;
-    }
-    setLatestExecutorMessageTraces([]);
-    const abortController = new AbortController();
-    const subscription = of([])
-      .pipe(
-        expand(() =>
-          timer(5000).pipe(
-            concatMap(() =>
-              getAllTracesByMessageId({
-                messageId: traceExecutorMessageId,
-                http,
-                signal: abortController.signal,
-                dataSourceId: dataSourceIdRef.current,
-              })
-            )
-          )
-        )
-      )
       .subscribe((traces) => {
-        setLatestExecutorMessageTraces(traces);
+        setMessageTraces(traces);
+        if (traces.length > 0) {
+          setShouldShowLoading(false);
+        }
       });
 
     return () => {
       subscription.unsubscribe();
       abortController.abort('SOPContainer unmount.');
     };
-  }, [traceExecutorMessageId, http]);
+  }, [taskFinished, parsedParagraphOut.parentInteractionId, http]);
 
   return (
     <div>
-      <EuiSteps steps={steps} />
+      {shouldShowLoading ? <EuiLoadingContent lines={3} /> : <EuiSteps steps={steps} />}
       {finalMessage && (
         <EuiText className="wrapAll markdown-output-text" size="s">
           <MarkdownRender source={finalMessage} />
