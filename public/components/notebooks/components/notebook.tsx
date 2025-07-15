@@ -63,6 +63,7 @@ import { getMLCommonsTask } from '../../../utils/ml_commons_apis';
 import { parseParagraphOut } from '../../../utils/paragraph';
 import { isStateCompletedOrFailed } from '../../../utils/task';
 import { constructDeepResearchParagraphOut } from '../../../../common/utils/paragraph';
+import { CreateParagraphFromDeepResearchTaskModal } from './helpers/custom_modals/create_paragraph_from_deep_research_task_modal';
 
 const ParagraphTypeDeepResearch = 'DEEP_RESEARCH';
 
@@ -123,6 +124,7 @@ interface NotebookState {
   dataSourceMDSId: string | undefined | null;
   dataSourceMDSLabel: string | undefined | null;
   dataSourceMDSEnabled: boolean;
+  isCreateParagraphFromDeepResearchTaskModalOpen: boolean;
 }
 export class Notebook extends Component<NotebookProps, NotebookState> {
   private _taskSubscriptions = new Map<string, Subscription>();
@@ -151,6 +153,7 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
       dataSourceMDSId: null,
       dataSourceMDSLabel: null,
       dataSourceMDSEnabled: false,
+      isCreateParagraphFromDeepResearchTaskModalOpen: false,
     };
   }
 
@@ -418,12 +421,30 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
   };
 
   // Backend call to add a paragraph, switch to "view both" if in output only view
-  addPara = (index: number, newParaContent: string, inpType: string) => {
+  addPara = (
+    index: number,
+    newParaContent: string,
+    inpType: string,
+    {
+      dataSourceId,
+      dataSourceLabel,
+      newParaResult,
+      isInputExpanded,
+    }: {
+      dataSourceId?: string;
+      dataSourceLabel?: string;
+      newParaResult?: string;
+      isInputExpanded?: boolean;
+    } = {}
+  ) => {
     const addParaObj = {
       noteId: this.props.openedNoteId,
       paragraphIndex: index,
       paragraphInput: newParaContent,
+      paragraphResult: newParaResult,
       inputType: inpType,
+      dataSourceMDSId: dataSourceId,
+      dataSourceMDSLabel: dataSourceLabel,
     };
 
     return this.props.http
@@ -434,7 +455,7 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
         const paragraphs = [...this.state.paragraphs];
         paragraphs.splice(index, 0, res);
         const newPara = this.parseParagraphs([res])[0];
-        newPara.isInputExpanded = true;
+        newPara.isInputExpanded = isInputExpanded ?? true;
         const parsedPara = [...this.state.parsedPara];
         parsedPara.splice(index, 0, newPara);
 
@@ -1099,6 +1120,15 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
           <EuiFlexItem grow={false}>
             <EuiSmallButton
               onClick={() => {
+                this.setState({ isCreateParagraphFromDeepResearchTaskModalOpen: true });
+              }}
+            >
+              Create paragraph from deep research task
+            </EuiSmallButton>
+          </EuiFlexItem>
+          <EuiFlexItem grow={false}>
+            <EuiSmallButton
+              onClick={() => {
                 this.setState({ isParaActionsPopoverOpen: false });
                 this.showDeleteAllParaModal();
               }}
@@ -1611,6 +1641,27 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
               </div>
             )}
             {showLoadingModal}
+            {this.state.isCreateParagraphFromDeepResearchTaskModalOpen && (
+              <CreateParagraphFromDeepResearchTaskModal
+                closeModal={() => {
+                  this.setState({ isCreateParagraphFromDeepResearchTaskModalOpen: false });
+                }}
+                savedObjectsClient={this.props.savedObjectsMDSClient.client}
+                notifications={this.props.notifications.toasts}
+                dataSourceEnabled={this.props.dataSourceEnabled}
+                dataSourceManagement={this.props.dataSourceManagement}
+                http={this.props.http}
+                onCreate={async ({ input, result, dataSourceId, dataSourceLabel }) => {
+                  await this.addPara(
+                    this.state.paragraphs.length,
+                    input,
+                    ParagraphTypeDeepResearch,
+                    { newParaResult: result, dataSourceId, dataSourceLabel, isInputExpanded: false }
+                  );
+                  await this.loadNotebook();
+                }}
+              />
+            )}
           </EuiPageBody>
         </EuiPage>
         {this.state.isModalVisible && this.state.modalLayout}
