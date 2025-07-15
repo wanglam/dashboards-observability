@@ -4,7 +4,15 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import MarkdownRender from '@nteract/markdown';
-import { EuiButton, EuiLoadingContent, EuiText, EuiAccordion, EuiSpacer } from '@elastic/eui';
+import {
+  EuiButton,
+  EuiLoadingContent,
+  EuiText,
+  EuiAccordion,
+  EuiSpacer,
+  EuiFlexGroup,
+  EuiFlexItem,
+} from '@elastic/eui';
 import { of, timer } from 'rxjs';
 import { concatMap, expand, skip, takeWhile } from 'rxjs/operators';
 
@@ -26,6 +34,7 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
   const parsedParagraphOut = useMemo(() => parseParagraphOut(para)[0], [para]);
   const [isLoading, setIsLoading] = useState(isStateCompletedOrFailed(parsedParagraphOut.state));
   const [tracesVisible, setTracesVisible] = useState(!isStateCompletedOrFailed(parseParagraphOut));
+  const [inheritedStepsVisible, setInheritedStepsVisible] = useState(false);
   const [executorMessages, setExecutorMessages] = useState([]);
   const [loadingSteps, setLoadingSteps] = useState(false);
   const [traceModalData, setTraceModalData] = useState<{
@@ -112,39 +121,54 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
     };
   }, [parsedParagraphOut.state, http]);
 
+  const traceStartIndex = executorMessages.findIndex(
+    (message) => message.input === traces[0]?.input
+  );
+
   const renderTraces = () => {
+    const input2ExecutorMessage = executorMessages.reduce(
+      (previousValue, executorMessage) => ({
+        ...previousValue,
+        [executorMessage.input]: executorMessage,
+      }),
+      {}
+    );
+
     return (
       <>
-        {[...traces, ...executorMessages.slice(traces.length)].map(
-          ({ input, response, message_id: messageId }, index) => (
-            <React.Fragment key={messageId}>
-              <EuiAccordion
-                id={`trace-${index}`}
-                buttonContent={`Step ${index + 1}${!response ? '(No response)' : ''} - ${input}`}
-                paddingSize="l"
-              >
-                {response && (
-                  <EuiText className="wrapAll markdown-output-text" size="s">
-                    <MarkdownRender source={response} />
-                  </EuiText>
-                )}
-                {executorMessages?.[index] && (
-                  <EuiButton
-                    onClick={() => {
-                      setTraceModalData({
-                        messageId: executorMessages[index].message_id,
-                        refresh: !response,
-                      });
-                    }}
-                  >
-                    Explain this step
-                  </EuiButton>
-                )}
-              </EuiAccordion>
-              <EuiSpacer />
-            </React.Fragment>
-          )
-        )}
+        {[
+          ...(inheritedStepsVisible ? executorMessages.slice(0, traceStartIndex) : []),
+          ...traces,
+        ].map(({ input, response, message_id: messageId }, index) => (
+          <React.Fragment key={messageId}>
+            <EuiAccordion
+              id={`trace-${index}`}
+              buttonContent={`${
+                inheritedStepsVisible && index < traceStartIndex ? '(Inherited step) ' : ''
+              } Step ${index + 1}${!response ? '(No response)' : ''} - ${input}`}
+              paddingSize="l"
+            >
+              {response && (
+                <EuiText className="wrapAll markdown-output-text" size="s">
+                  <MarkdownRender source={response} />
+                </EuiText>
+              )}
+              {input2ExecutorMessage[input] && (
+                <EuiButton
+                  onClick={() => {
+                    setTraceModalData({
+                      messageId: input2ExecutorMessage[input].message_id,
+                      refresh: !response,
+                    });
+                  }}
+                >
+                  Explain this step
+                </EuiButton>
+              )}
+            </EuiAccordion>
+            <EuiSpacer />
+          </React.Fragment>
+        ))}
       </>
     );
   };
@@ -189,49 +213,67 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
       {isLoading ? (
         <EuiLoadingContent />
       ) : (
-        <EuiButton
-          isLoading={loadingSteps}
-          onClick={async () => {
-            if (!parsedParagraphOut) {
-              return;
-            }
-            if (traces.length > 0) {
-              setTracesVisible((flag) => !flag);
-              return;
-            }
-            setLoadingSteps(true);
-            try {
-              const {
-                parent_interaction_id: parentInteractionId,
-                executor_memory_id: executorMemoryId,
-              } = parsedParagraphOut;
-              await Promise.allSettled([
-                parentInteractionId
-                  ? getAllTracesByMessageId({
-                      messageId: parentInteractionId,
-                      http,
-                      dataSourceId: dataSourceIdRef.current,
-                    })
-                  : Promise.resolve([]),
-                executorMemoryId
-                  ? getAllMessagesByMemoryId({
-                      memoryId: executorMemoryId,
-                      http,
-                      dataSourceId: dataSourceIdRef.current,
-                    })
-                  : Promise.resolve([]),
-              ]).then(([{ value: loadedTraces }, { value: loadedExecutorMessages }]) => {
-                setTraces(loadedTraces);
-                setExecutorMessages(loadedExecutorMessages);
-              });
-            } finally {
-              setLoadingSteps(false);
-            }
-            setTracesVisible((flag) => !flag);
-          }}
-        >
-          {tracesVisible ? 'Hide traces' : 'Show traces'}
-        </EuiButton>
+        <EuiFlexGroup>
+          <EuiFlexItem grow={false}>
+            <EuiButton
+              isLoading={loadingSteps}
+              onClick={async () => {
+                if (!parsedParagraphOut) {
+                  return;
+                }
+                if (traces.length > 0) {
+                  setTracesVisible((flag) => !flag);
+                  return;
+                }
+                setLoadingSteps(true);
+                try {
+                  const {
+                    parent_interaction_id: parentInteractionId,
+                    executor_memory_id: executorMemoryId,
+                  } = parsedParagraphOut;
+                  await Promise.allSettled([
+                    parentInteractionId
+                      ? getAllTracesByMessageId({
+                          messageId: parentInteractionId,
+                          http,
+                          dataSourceId: dataSourceIdRef.current,
+                        })
+                      : Promise.resolve([]),
+                    executorMemoryId
+                      ? getAllMessagesByMemoryId({
+                          memoryId: executorMemoryId,
+                          http,
+                          dataSourceId: dataSourceIdRef.current,
+                        })
+                      : Promise.resolve([]),
+                  ]).then(([{ value: loadedTraces }, { value: loadedExecutorMessages }]) => {
+                    setTraces(loadedTraces);
+                    setExecutorMessages(loadedExecutorMessages);
+                  });
+                } finally {
+                  setLoadingSteps(false);
+                }
+                if (tracesVisible) {
+                  setInheritedStepsVisible(false);
+                }
+                setTracesVisible((flag) => !flag);
+              }}
+            >
+              {tracesVisible ? 'Hide traces' : 'Show traces'}
+            </EuiButton>
+          </EuiFlexItem>
+          {tracesVisible && traceStartIndex > 0 && (
+            <EuiFlexItem grow={false}>
+              <EuiButton
+                onClick={() => {
+                  setInheritedStepsVisible((flag) => !flag);
+                }}
+              >
+                {inheritedStepsVisible ? 'Hide' : 'Show'} inherited steps
+              </EuiButton>
+            </EuiFlexItem>
+          )}
+        </EuiFlexGroup>
       )}
       {traceModalData && (
         <MessageTraceModal

@@ -162,6 +162,7 @@ export async function updateRunFetchParagraph(
     deepResearchAgentId?: string | undefined;
     deepResearchContext?: string | undefined;
     deepResearchBaseMemoryId?: string | undefined;
+    deepResearchBaseExecutorMemoryId?: string | undefined;
   },
   opensearchNotebooksClient: SavedObjectsClientContract,
   transport: OpenSearchClient['transport']
@@ -207,7 +208,8 @@ export async function updateRunFetchParagraph(
       deepResearchAgentId,
       params.deepResearchContext,
       params.deepResearchBaseMemoryId,
-      sopAgentId
+      sopAgentId,
+      params.deepResearchBaseExecutorMemoryId
     );
 
     const updateNotebook = {
@@ -238,7 +240,8 @@ export async function runParagraph(
   deepResearchAgentId: string | undefined,
   deepResearchContext: string | undefined,
   deepResearchBaseMemoryId: string | undefined,
-  sopAgentId: string | undefined
+  sopAgentId: string | undefined,
+  deepResearchBaseExecutorMemoryId: string | undefined
 ) {
   try {
     const updatedParagraphs = [];
@@ -304,6 +307,7 @@ export async function runParagraph(
                   deepResearchContext ? `, Context: ${deepResearchContext}` : ''
                 }`,
                 memory_id: deepResearchBaseMemoryId,
+                executor_agent_memory_id: deepResearchBaseExecutorMemoryId,
                 system_prompt: `
 ${COMMON_SYSTEM_PROMPT}
 ${ORIGINAL_DEEP_RESEARCH_SYSTEM_PROMPT}`.trim(),
@@ -324,6 +328,7 @@ ${ORIGINAL_DEEP_RESEARCH_EXECUTOR_SYSTEM_PROMPT}`.trim(),
                   agentId: deepResearchAgentId,
                   state: body.status,
                   baseMemoryId: deepResearchBaseMemoryId,
+                  baseExecutorMemoryId: deepResearchBaseExecutorMemoryId,
                 })
               ),
               execution_time: `${(now() - startTime).toFixed(3)} ms`,
