@@ -18,6 +18,7 @@ import {
   EuiSmallButton,
   EuiSmallButtonIcon,
   EuiSpacer,
+  EuiSwitch,
   EuiText,
   EuiToolTip,
   htmlIdGenerator,
@@ -116,7 +117,8 @@ interface ParagraphProps {
     paraType?: string,
     dataSourceMDSId?: string,
     deepResearchAgentId?: string,
-    deepResearchBaseMemoryId?: string
+    deepResearchBaseMemoryId?: string,
+    deepResearchBaseExecutorMemoryId?: string
   ) => void;
   clonePara: (para: ParaType, index: number) => void;
   movePara: (index: number, targetIndex: number) => void;
@@ -187,7 +189,29 @@ export const Paragraphs = forwardRef((props: ParagraphProps, ref) => {
   const [deepResearchBaseMemoryId, setDeepResearchBaseMemoryId] = useState<string | undefined>(
     parsedParagraphOut[0]?.base_memory_id
   );
+
+  const executorMemoryIds = useMemo(
+    () =>
+      new Array(
+        ...new Set(
+          props.paragraphs
+            .filter((paragraph) => paragraph.isDeepResearch)
+            .map((paragraph) => parseParagraphOut(paragraph)[0])
+            .filter(
+              (result) =>
+                result && result.memory_id === deepResearchBaseMemoryId && result.executor_memory_id
+            )
+            .map((result) => result.executor_memory_id)
+        )
+      ),
+    [props.paragraphs, deepResearchBaseMemoryId]
+  );
+  const [deepResearchBaseExecutorMemoryId, setDeepResearchBaseExecutorMemoryId] = useState<
+    string | undefined
+  >(parsedParagraphOut[0]?.base_executor_memory_id);
+
   const deepResearchMemoryId = parsedParagraphOut[0]?.memory_id;
+  const deepResearchExecutorMemoryId = parsedParagraphOut[0]?.executor_memory_id;
 
   // output is available if it's not cleared and vis paragraph has a selected visualization
   const isOutputAvailable =
@@ -345,7 +369,8 @@ export const Paragraphs = forwardRef((props: ParagraphProps, ref) => {
       visType,
       dataSourceMDSId,
       deepResearchAgentId,
-      deepResearchBaseMemoryId
+      deepResearchBaseMemoryId,
+      deepResearchBaseExecutorMemoryId
     );
   };
 
@@ -647,6 +672,8 @@ export const Paragraphs = forwardRef((props: ParagraphProps, ref) => {
     }
     if (!shouldSkipAgentIdResetRef.current) {
       setDeepResearchAgentId(undefined);
+      setDeepResearchBaseMemoryId(undefined);
+      setDeepResearchBaseExecutorMemoryId(undefined);
     }
     shouldSkipAgentIdResetRef.current = false;
     setDataSourceMDSId(dataConnectionId);
@@ -676,14 +703,18 @@ export const Paragraphs = forwardRef((props: ParagraphProps, ref) => {
       <EuiPanel>
         {renderParaHeader(
           para.isDeepResearch
-            ? `Deep Research${deepResearchMemoryId ? ` (Memory ID: ${deepResearchMemoryId})` : ''}`
+            ? `Deep Research${deepResearchMemoryId ? ` (Memory ID: ${deepResearchMemoryId})` : ''}${
+                deepResearchExecutorMemoryId
+                  ? ` (Executor Memory ID: ${deepResearchExecutorMemoryId})`
+                  : ''
+              }`
             : !para.isVizualisation
             ? 'Code block'
             : 'Visualization',
           index
         )}
         {dataSourceEnabled && !para.isVizualisation && (
-          <EuiFlexGroup>
+          <EuiFlexGroup alignItems="center">
             <EuiFlexItem>
               <DataSourceSelector
                 savedObjectsClient={savedObjectsMDSClient.client}
@@ -705,8 +736,25 @@ export const Paragraphs = forwardRef((props: ParagraphProps, ref) => {
                 <EuiFlexItem>
                   <MemorySelector
                     value={deepResearchBaseMemoryId}
-                    onChange={setDeepResearchBaseMemoryId}
+                    onChange={(newMemoryId) => {
+                      setDeepResearchBaseMemoryId(newMemoryId);
+                      setDeepResearchBaseExecutorMemoryId(undefined);
+                    }}
                     memoryIds={memoryIds}
+                  />
+                </EuiFlexItem>
+                <EuiFlexItem grow={false}>
+                  <EuiSwitch
+                    label="Include same executor memory"
+                    checked={executorMemoryIds[0] === deepResearchBaseExecutorMemoryId}
+                    onChange={() => {
+                      if (deepResearchBaseExecutorMemoryId) {
+                        setDeepResearchBaseExecutorMemoryId(undefined);
+                      } else {
+                        setDeepResearchBaseExecutorMemoryId(executorMemoryIds[0]);
+                      }
+                    }}
+                    disabled={executorMemoryIds.length === 0}
                   />
                 </EuiFlexItem>
                 <EuiFlexItem>

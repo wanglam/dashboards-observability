@@ -624,11 +624,13 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
     paraUniqueId,
     agentId,
     baseMemoryId,
+    baseExecutorMemoryId,
   }: {
     taskId: string;
     paraUniqueId: string;
     agentId: string;
     baseMemoryId?: string | undefined;
+    baseExecutorMemoryId?: string | undefined;
   }) => {
     this._registerTaskParagraphUpdater({
       taskId,
@@ -642,6 +644,7 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
               taskId,
               agentId,
               baseMemoryId,
+              baseExecutorMemoryId,
             })
           ),
         };
@@ -697,7 +700,8 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
     paraType?: string,
     _dataSourceMDSId?: string,
     deepResearchAgentId?: string,
-    deepResearchBaseMemoryId?: string
+    deepResearchBaseMemoryId?: string,
+    deepResearchBaseExecutorMemoryId?: string
   ) => {
     this.showParagraphRunning(index);
     if (vizObjectInput) {
@@ -713,6 +717,7 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
       dataSourceMDSLabel: this.state.dataSourceMDSLabel || '',
       deepResearchAgentId,
       deepResearchBaseMemoryId,
+      deepResearchBaseExecutorMemoryId,
     };
     const isValid = isValidUUID(this.props.openedNoteId);
     const route = isValid
@@ -765,6 +770,7 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
             paraUniqueId: para.uniqueId,
             agentId: deepResearchAgentId ?? '',
             baseMemoryId: deepResearchBaseMemoryId,
+            baseExecutorMemoryId: deepResearchBaseExecutorMemoryId,
           });
         }
         this.setState({ paragraphs, parsedPara });
@@ -907,6 +913,7 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
               agent_id: agentId,
               state,
               base_memory_id: baseMemoryId,
+              base_executor_memory_id: baseExecutorMemoryId,
             } = JSON.parse(currentResult);
             const paragraphId = res.paragraphs[index].id;
 
@@ -919,6 +926,7 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
               agentId,
               paraUniqueId: paragraphId,
               baseMemoryId,
+              baseExecutorMemoryId,
             });
           }
         }
