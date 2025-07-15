@@ -141,6 +141,45 @@ export function registerMLCommonsRoutes(router: IRouter) {
       }
     }
   );
+  /**
+   * Returns traces of message
+   */
+  router.get(
+    {
+      path: OBSERVABILITY_ML_COMMONS_API.singleMessage,
+      validate: {
+        params: schema.object({
+          messageId: schema.string(),
+        }),
+        query: schema.maybe(
+          schema.object({
+            data_source_id: schema.maybe(schema.string()),
+          })
+        ),
+      },
+    },
+    async (context, request, response) => {
+      const transport = await getOpenSearchClientTransport({
+        context,
+        dataSourceId: request.query?.data_source_id,
+      });
+      try {
+        const { body } = await transport.request({
+          method: 'GET',
+          path: OPENSEARCH_ML_COMMONS_API.singleMessage.replace(
+            `{messageId}`,
+            request.params.messageId
+          ),
+        });
+        return response.ok({ body });
+      } catch (e) {
+        if (e.meta?.body?.status === 404) {
+          return response.ok({ body: [] });
+        }
+        return response.badRequest({ body: e.message });
+      }
+    }
+  );
 
   /**
    * Returns traces of message

@@ -27,7 +27,13 @@ const ORIGINAL_DEEP_RESEARCH_SYSTEM_PROMPT =
 const ORIGINAL_DEEP_RESEARCH_EXECUTOR_SYSTEM_PROMPT =
   'You are a dedicated helper agent working as part of a plan‑execute‑reflect framework. Your role is to receive a discrete task, execute all necessary internal reasoning or tool calls, and return a single, final response that fully addresses the task. You must never return an empty response. If you are unable to complete the task or retrieve meaningful information, you must respond with a clear explanation of the issue or what was missing. Under no circumstances should you end your reply with a question or ask for more information. If you search any index, always include the raw documents in the final result instead of summarizing the content. This is critical to give visibility into what the query retrieved.';
 
-export function createNotebook(paragraphInput: string, inputType: string) {
+export function createNotebook(
+  paragraphInput: string,
+  inputType: string,
+  paragraphResult?: string,
+  dataSourceMDSId?: string,
+  dataSourceMDSLabel?: string
+) {
   try {
     let paragraphType = 'MARKDOWN';
     if (inputType === 'VISUALIZATION') {
@@ -49,7 +55,7 @@ export function createNotebook(paragraphInput: string, inputType: string) {
     const outputObjects: DefaultOutput[] = [
       {
         outputType: paragraphType,
-        result: '',
+        result: paragraphResult ?? '',
         execution_time: '0s',
       },
     ];
@@ -59,6 +65,8 @@ export function createNotebook(paragraphInput: string, inputType: string) {
       dateModified: new Date().toISOString(),
       input: inputObject,
       output: outputObjects,
+      dataSourceMDSId,
+      dataSourceMDSLabel,
     };
 
     return newParagraph;
@@ -80,12 +88,26 @@ export async function fetchNotebook(
 }
 
 export async function createParagraphs(
-  params: { noteId: string; paragraphIndex: number; paragraphInput: string; inputType: string },
+  params: {
+    noteId: string;
+    paragraphIndex: number;
+    paragraphInput: string;
+    inputType: string;
+    paragraphResult?: string;
+    dataSourceMDSId?: string;
+    dataSourceMDSLabel?: string;
+  },
   opensearchNotebooksClient: SavedObjectsClientContract
 ) {
   const notebookinfo = await fetchNotebook(params.noteId, opensearchNotebooksClient);
   const paragraphs = notebookinfo.attributes.savedNotebook.paragraphs;
-  const newParagraph = createNotebook(params.paragraphInput, params.inputType);
+  const newParagraph = createNotebook(
+    params.paragraphInput,
+    params.inputType,
+    params.paragraphResult,
+    params.dataSourceMDSId,
+    params.dataSourceMDSLabel
+  );
   paragraphs.splice(params.paragraphIndex, 0, newParagraph);
   const updateNotebook = {
     paragraphs,
