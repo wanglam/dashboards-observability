@@ -49,11 +49,13 @@ export const AgentsSelector = ({
   http,
   value,
   onChange,
+  autoSelectFirst,
 }: {
   dataSourceMDSId: string;
   http: CoreStart['http'];
   value: string | undefined;
   onChange: (value: string | undefined) => void;
+  autoSelectFirst: boolean;
 }) => {
   const [agents, setAgents] = useState([]);
   const valueRef = useRef(value);
@@ -64,7 +66,7 @@ export const AgentsSelector = ({
       if (!canceled) {
         const agentResults = hits.hits.map(({ _id, _source: { name } }) => ({ id: _id, name }));
         setAgents(agentResults);
-        if (!valueRef.current) {
+        if (!valueRef.current && autoSelectFirst) {
           const recommendAgent = agentResults.find(
             ({ name }) => name.includes('3.7') && name.includes('ppl')
           );
@@ -75,7 +77,7 @@ export const AgentsSelector = ({
     return () => {
       canceled = true;
     };
-  }, [http, dataSourceMDSId]);
+  }, [http, dataSourceMDSId, autoSelectFirst]);
 
   const options = useMemo(
     () => [

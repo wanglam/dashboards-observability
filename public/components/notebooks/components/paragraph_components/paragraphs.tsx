@@ -763,6 +763,7 @@ export const Paragraphs = forwardRef((props: ParagraphProps, ref) => {
                     value={deepResearchAgentId}
                     dataSourceMDSId={dataSourceMDSId}
                     onChange={setDeepResearchAgentId}
+                    autoSelectFirst={!parsedParagraphOut[0]?.task_id}
                   />
                 </EuiFlexItem>
               </>
