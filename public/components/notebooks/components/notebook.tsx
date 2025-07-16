@@ -64,6 +64,10 @@ import { parseParagraphOut } from '../../../utils/paragraph';
 import { isStateCompletedOrFailed } from '../../../utils/task';
 import { constructDeepResearchParagraphOut } from '../../../../common/utils/paragraph';
 import { CreateParagraphFromDeepResearchTaskModal } from './helpers/custom_modals/create_paragraph_from_deep_research_task_modal';
+import {
+  getSystemPrompts,
+  SystemPromptSettingModal,
+} from './helpers/custom_modals/system_prompt_setting_modal';
 
 const ParagraphTypeDeepResearch = 'DEEP_RESEARCH';
 
@@ -125,6 +129,7 @@ interface NotebookState {
   dataSourceMDSLabel: string | undefined | null;
   dataSourceMDSEnabled: boolean;
   isCreateParagraphFromDeepResearchTaskModalOpen: boolean;
+  isSystemPromptSettingModalOpen: boolean;
 }
 export class Notebook extends Component<NotebookProps, NotebookState> {
   private _taskSubscriptions = new Map<string, Subscription>();
@@ -154,6 +159,7 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
       dataSourceMDSLabel: null,
       dataSourceMDSEnabled: false,
       isCreateParagraphFromDeepResearchTaskModalOpen: false,
+      isSystemPromptSettingModalOpen: false,
     };
   }
 
@@ -728,6 +734,7 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
     if (vizObjectInput) {
       para.inp = this.state.vizPrefix + vizObjectInput; // "%sh check"
     }
+    const prompts = getSystemPrompts();
 
     const paraUpdateObject = {
       noteId: this.props.openedNoteId,
@@ -739,6 +746,8 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
       deepResearchAgentId,
       deepResearchBaseMemoryId,
       deepResearchBaseExecutorMemoryId,
+      deepResearchSystemPrompt: prompts.systemPrompt,
+      deepResearchExecutorSystemPrompt: prompts.executorSystemPrompt,
     };
     const isValid = isValidUUID(this.props.openedNoteId);
     const route = isValid
@@ -1319,6 +1328,19 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
         {this.state.savedObjectNotebook ? (
           <>
             <EuiFlexItem grow={false}>
+              <EuiToolTip content={'Setting system prompt'}>
+                <EuiButtonIcon
+                  display="base"
+                  iconType="setting"
+                  size="s"
+                  onClick={() => {
+                    this.setState({ isSystemPromptSettingModalOpen: true });
+                  }}
+                  data-test-subj="system-prompt-setting-icon"
+                />
+              </EuiToolTip>
+            </EuiFlexItem>
+            <EuiFlexItem grow={false}>
               <EuiToolTip
                 content={
                   <FormattedMessage id="notebook.deleteButton.tooltip" defaultMessage="Delete" />
@@ -1659,6 +1681,13 @@ export class Notebook extends Component<NotebookProps, NotebookState> {
                     { newParaResult: result, dataSourceId, dataSourceLabel, isInputExpanded: false }
                   );
                   await this.loadNotebook();
+                }}
+              />
+            )}
+            {this.state.isSystemPromptSettingModalOpen && (
+              <SystemPromptSettingModal
+                closeModal={() => {
+                  this.setState({ isSystemPromptSettingModalOpen: false });
                 }}
               />
             )}
