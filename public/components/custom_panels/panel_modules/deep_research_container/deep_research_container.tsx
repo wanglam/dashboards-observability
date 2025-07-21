@@ -15,6 +15,7 @@ import {
 } from '@elastic/eui';
 import { of, timer } from 'rxjs';
 import { concatMap, expand, skip, takeWhile } from 'rxjs/operators';
+import moment from 'moment';
 
 import { CoreStart } from '../../../../../../../src/core/public';
 import { ParaType } from '../../../../../common/types/notebooks';
@@ -23,6 +24,8 @@ import { getAllMessagesByMemoryId, getAllTracesByMessageId, isMarkdownText } fro
 import { MessageTraceModal } from './message_trace_modal';
 import { parseParagraphOut } from '../../../../utils/paragraph';
 import { isStateCompletedOrFailed } from '../../../../utils/task';
+import { getMLCommonsTask } from '../../../../utils/ml_commons_apis';
+import { formatTimeGap, getTimeGapFromDates } from '../../../../utils/time';
 
 interface Props {
   http: CoreStart['http'];
@@ -32,13 +35,16 @@ interface Props {
 export const DeepResearchContainer = ({ para, http }: Props) => {
   const [traces, setTraces] = useState([]);
   const parsedParagraphOut = useMemo(() => parseParagraphOut(para)[0], [para]);
+  const isTaskCompleteOrFailed = isStateCompletedOrFailed(parsedParagraphOut.state);
   const [isLoading, setIsLoading] = useState(isStateCompletedOrFailed(parsedParagraphOut.state));
   const [tracesVisible, setTracesVisible] = useState(!isStateCompletedOrFailed(parseParagraphOut));
   const [inheritedStepsVisible, setInheritedStepsVisible] = useState(false);
   const [executorMessages, setExecutorMessages] = useState([]);
   const [loadingSteps, setLoadingSteps] = useState(false);
+  const [rawTask, setRawTask] = useState(null);
   const [traceModalData, setTraceModalData] = useState<{
     messageId: string;
+    messageCreateTime: string;
     refresh: boolean;
   }>();
   const initialFinalResponseVisible = useRef(false);
@@ -119,7 +125,37 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
       subscription.unsubscribe();
       abortController.abort('DeepResearchContainer unmount.');
     };
-  }, [parsedParagraphOut.state, http]);
+  }, [
+    parsedParagraphOut.state,
+    parsedParagraphOut.parent_interaction_id,
+    parsedParagraphOut.executor_memory_id,
+    http,
+  ]);
+
+  useEffect(() => {
+    const abortController = new AbortController();
+
+    if (!parsedParagraphOut.task_id) {
+      setRawTask(null);
+      return;
+    }
+
+    setRawTask((prevRawTask) =>
+      prevRawTask?.id === parsedParagraphOut.task_id ? prevRawTask : null
+    );
+    getMLCommonsTask({
+      http,
+      taskId: parsedParagraphOut.task_id,
+      dataSourceId: dataSourceIdRef.current,
+      signal: abortController.signal,
+    }).then((task) => {
+      setRawTask({ ...task, id: parsedParagraphOut.task_id });
+    });
+
+    return () => {
+      abortController.abort('DeepResearchContainer change.');
+    };
+  }, [isTaskCompleteOrFailed, parsedParagraphOut.task_id, http]);
 
   const traceStartIndex = executorMessages.findIndex(
     (message) => message.input === traces[0]?.input
@@ -134,41 +170,59 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
       {}
     );
 
+    const allSteps = [
+      ...(inheritedStepsVisible ? executorMessages.slice(0, traceStartIndex) : []),
+      ...traces,
+    ];
     return (
       <>
-        {[
-          ...(inheritedStepsVisible ? executorMessages.slice(0, traceStartIndex) : []),
-          ...traces,
-        ].map(({ input, response, message_id: messageId }, index) => (
-          <React.Fragment key={messageId}>
-            <EuiAccordion
-              id={`trace-${index}`}
-              buttonContent={`${
-                inheritedStepsVisible && index < traceStartIndex ? '(Inherited step) ' : ''
-              } Step ${index + 1}${!response ? '(No response)' : ''} - ${input}`}
-              paddingSize="l"
-            >
-              {response && (
-                <EuiText className="wrapAll markdown-output-text" size="s">
-                  <MarkdownRender source={response} />
-                </EuiText>
-              )}
-              {input2ExecutorMessage[input] && (
-                <EuiButton
-                  onClick={() => {
-                    setTraceModalData({
-                      messageId: input2ExecutorMessage[input].message_id,
-                      refresh: !response,
-                    });
-                  }}
+        {allSteps.map(
+          ({ input, response, message_id: messageId, create_time: createTime }, index) => {
+            const isInheritedStep = inheritedStepsVisible && index < traceStartIndex;
+            let durationStr = '';
+            if (!isInheritedStep) {
+              if (allSteps[index - 1]) {
+                durationStr = getTimeGapFromDates(
+                  moment(allSteps[index - 1].create_time),
+                  moment(createTime)
+                );
+              } else if (rawTask?.create_time) {
+                durationStr = getTimeGapFromDates(moment(rawTask.create_time), moment(createTime));
+              }
+            }
+            return (
+              <React.Fragment key={messageId}>
+                <EuiAccordion
+                  id={`trace-${index}`}
+                  buttonContent={`${isInheritedStep ? '(Inherited step) ' : ''} Step ${index + 1}${
+                    !response ? '(No response)' : ''
+                  } - ${input} ${durationStr ? `(Duration: ${durationStr})` : ''}`}
+                  paddingSize="l"
                 >
-                  Explain this step
-                </EuiButton>
-              )}
-            </EuiAccordion>
-            <EuiSpacer />
-          </React.Fragment>
-        ))}
+                  {response && (
+                    <EuiText className="wrapAll markdown-output-text" size="s">
+                      <MarkdownRender source={response} />
+                    </EuiText>
+                  )}
+                  {input2ExecutorMessage[input] && (
+                    <EuiButton
+                      onClick={() => {
+                        setTraceModalData({
+                          messageId: input2ExecutorMessage[input].message_id,
+                          messageCreateTime: input2ExecutorMessage[input].create_time,
+                          refresh: !response,
+                        });
+                      }}
+                    >
+                      Explain this step
+                    </EuiButton>
+                  )}
+                </EuiAccordion>
+                <EuiSpacer />
+              </React.Fragment>
+            );
+          }
+        )}
       </>
     );
   };
@@ -196,7 +250,16 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
         <>
           <EuiAccordion
             id="final-response"
-            buttonContent={<h3>Final response</h3>}
+            buttonContent={
+              <h3>
+                Final response{' '}
+                {rawTask && rawTask.last_update_time && rawTask.create_time
+                  ? `(Total Duration: ${formatTimeGap(
+                      rawTask.last_update_time - rawTask.create_time
+                    )})`
+                  : ''}
+              </h3>
+            }
             initialIsOpen={initialFinalResponseVisible.current}
           >
             <EuiText className="wrapAll markdown-output-text" size="s">
@@ -278,6 +341,7 @@ export const DeepResearchContainer = ({ para, http }: Props) => {
       {traceModalData && (
         <MessageTraceModal
           messageId={traceModalData.messageId}
+          messageCreateTime={traceModalData.messageCreateTime}
           refresh={shouldTracesModalRefresh()}
           http={http}
           closeModal={() => {
